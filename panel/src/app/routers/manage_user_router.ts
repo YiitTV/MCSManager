@@ -4,6 +4,7 @@ import { ROLE } from "../entity/user";
 import { $t } from "../i18n";
 import permission from "../middleware/permission";
 import validator from "../middleware/validator";
+import instanceGroupService from "../service/instance_group_service";
 import { getOperationLoggerOperator, operationLogger } from "../service/operation_logger";
 import { register } from "../service/passport_service";
 import userSystem from "../service/user_service";
@@ -46,6 +47,7 @@ router.del("/", permission({ level: ROLE.ADMIN }), async (ctx: Koa.Parameterized
         "warning"
       );
       await userSystem.deleteInstance(iterator);
+      await instanceGroupService.removeByOwner(String(iterator));
     }
     ctx.body = true;
   } catch (error: any) {

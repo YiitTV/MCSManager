@@ -51,6 +51,16 @@ export interface UseTerminalParams {
   daemonId: string;
 }
 
+export interface UseTerminalOptions {
+  // Maximum scrollback lines kept in memory. Omitted: the xterm.js default (full terminal page).
+  scrollback?: number;
+  // "auto" (default) prefers WebGL and falls back to canvas. "canvas" never creates a WebGL
+  // context, which matters when several terminals are open at once (browser context limit).
+  renderer?: "auto" | "canvas";
+  // Compact mode (mini console): smaller font and no touch selection controls.
+  compact?: boolean;
+}
+
 export interface StdoutData {
   instanceUuid: string;
   text: string;
@@ -60,7 +70,7 @@ const { setHistory } = useCommandHistory();
 
 export type UseTerminalHook = ReturnType<typeof useTerminal>;
 
-export function useTerminal() {
+export function useTerminal(options: UseTerminalOptions = {}) {
   const { hasBgImage } = useAppConfigStore();
 
   const events = new EventEmitter();
@@ -71,6 +81,7 @@ export function useTerminal() {
   const isConnect = ref<boolean>(false);
   const socketAddress = ref("");
   let isManualDisconnect = false;
+  let isDisposed = false;
   const historyReplayGate = createTerminalHistoryReplayGate();
 
   const isGlobalTerminal = computed(() => {
@@ -104,6 +115,8 @@ export function useTerminal() {
     });
     const remoteInfo = unref(res.value);
     if (!remoteInfo) throw new Error(t("TXT_CODE_181f2f08"));
+    // Unmounted while the request was in flight: do not open a socket nobody will close.
+    if (isDisposed) return undefined;
 
     let addr = remoteInfo.addr,
       prefix = remoteInfo.prefix;
@@ -203,13 +216,14 @@ export function useTerminal() {
       disableStdin: false,
       cursorStyle: "underline",
       cursorBlink: true,
-      fontSize: 14,
+      fontSize: options.compact ? 12 : 14,
       theme: {
         background,
         selectionBackground
       },
       allowProposedApi: true,
-      allowTransparency: true
+      allowTransparency: true,
+      ...(options.scrollback !== undefined ? { scrollback: options.scrollback } : {})
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -220,7 +234,8 @@ export function useTerminal() {
 
     terminal.value = term;
 
-    const gl = document.createElement("canvas").getContext("webgl2");
+    const gl =
+      options.renderer === "canvas" ? null : document.createElement("canvas").getContext("webgl2");
     if (gl) {
       // If WebGL2 is supported, use the WebGlAddon
       const webglAddon = new WebglAddon();
@@ -235,7 +250,7 @@ export function useTerminal() {
     }
 
     term.open(element);
-    if (isTouchCapable) {
+    if (isTouchCapable && !options.compact) {
       removeTouchHandlers = attachTerminalTouchControls({
         element,
         terminal: term,
@@ -360,6 +375,7 @@ export function useTerminal() {
   });
 
   onUnmounted(() => {
+    isDisposed = true;
     clearInterval(fitAddonTask);
     clearInterval(statusQueryTask);
     removeTouchHandlers?.();
