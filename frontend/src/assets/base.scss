@@ -12,3 +12,9 @@
 
   --color-always-white: #ffffff;
 }
+
+// Primary colour is orange (#ff9500): white text fails WCAG 4.5:1 on it, so use near-black.
+.ant-btn-primary:not(:disabled):not(.ant-btn-dangerous),
+.ant-btn-primary:not(:disabled):not(.ant-btn-dangerous) .anticon {
+  color: #111;
+}

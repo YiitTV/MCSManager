@@ -308,8 +308,8 @@ onMounted(async () => {
 .logging {
   .login-panel {
     transform: scale(0.94);
-    border: 2px solid var(--color-blue-5);
-    box-shadow: 0 0 20px rgba(28, 120, 207, 0.3);
+    border: 2px solid var(--color-primary);
+    box-shadow: 0 0 20px rgba(255, 149, 0, 0.3);
   }
 }
 .login-panel {
@@ -319,6 +319,18 @@ onMounted(async () => {
   // backdrop-filter: saturate(120%) blur(12px);
   background-color: var(--login-panel-bg);
 
+  // Hazard stripe accent on the top edge
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    pointer-events: none;
+    background: repeating-linear-gradient(-45deg, #ff9500 0 10px, #111 10px 20px);
+  }
+
   .login-panel-body {
     padding: 28px 24px;
     min-height: 322px;
@@ -326,12 +338,16 @@ onMounted(async () => {
 }
 
 .mcsmanager-link {
-  font-size: var(--font-body);
+  font-size: var(--font-body2);
   text-align: right;
   color: var(--color-gray-7);
   a {
     color: var(--color-gray-7) !important;
     text-decoration: underline;
+    transition: color 0.2s;
+    &:hover {
+      color: #ff9500 !important;
+    }
   }
 }
 .logging-icon {

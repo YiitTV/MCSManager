@@ -15,6 +15,10 @@ export const useAppConfigStore = createGlobalState(() => {
   const theme: ThemeConfig = reactive({
     algorithm: antTheme.defaultAlgorithm,
     token: {
+      colorPrimary: "#ff9500",
+      colorLink: "#ff9500",
+      colorLinkHover: "#ffad33",
+      borderRadius: 4,
       fontSizeLG: 14,
       fontSizeSM: 12,
       fontSizeXL: 18
@@ -26,7 +30,7 @@ export const useAppConfigStore = createGlobalState(() => {
 
   const logoImage = computed(() => appConfig.logoImage);
 
-  const currentTheme = useLocalStorage<AppTheme>(THEME_KEY, AppTheme.LIGHT);
+  const currentTheme = useLocalStorage<AppTheme>(THEME_KEY, AppTheme.DARK);
 
   const isDarkTheme = computed(() => {
     if (currentTheme.value === AppTheme.DARK) return true;
@@ -78,7 +82,7 @@ export const useAppConfigStore = createGlobalState(() => {
     document.body.classList.remove("app-light-theme");
   };
 
-  const resetTheme = () => (currentTheme.value = AppTheme.LIGHT);
+  const resetTheme = () => (currentTheme.value = AppTheme.DARK);
 
   const initAppTheme = async () => {
     if (

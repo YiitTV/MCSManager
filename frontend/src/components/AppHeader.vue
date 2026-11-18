@@ -48,7 +48,7 @@ const openPhoneMenu = (b = false) => {
       <nav class="btns">
         <a href="." style="margin-right: 12px">
           <div class="logo">
-            <img :src="logoImage" style="height: 18px" />
+            <img :src="logoImage" style="height: 22px" />
           </div>
         </a>
 
@@ -132,7 +132,7 @@ const openPhoneMenu = (b = false) => {
             </div>
           </div>
           <div>
-            <img :src="logo" style="height: 18px" />
+            <img :src="logo" style="height: 22px" />
           </div>
           <div style="width: 100px" class="justify-end">
             <div v-for="(item, index) in appMenus" :key="index">
@@ -247,6 +247,18 @@ const openPhoneMenu = (b = false) => {
   right: 0;
 
   z-index: 20;
+
+  // Hazard stripe accent under the header
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    pointer-events: none;
+    background: repeating-linear-gradient(-45deg, #ff9500 0 10px, #111 10px 20px);
+  }
 
   // Smooth height transition
   transition: height 0.3s ease-in-out;
