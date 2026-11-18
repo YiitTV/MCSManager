@@ -93,6 +93,9 @@ log "Source at commit $(git -C "$SRC" rev-parse --short HEAD)"
 
 log "Installing build dependencies (first run takes a few minutes)"
 export NODE_OPTIONS="--max-old-space-size=2048"
+# Root deps (e.g. async-mutex) are resolved by panel/daemon builds; skip the root
+# "install" lifecycle script, the per-package installs below cover it.
+(cd "$SRC" && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error)
 for d in common panel daemon frontend; do
   (cd "$SRC/$d" && npm ci --no-audit --no-fund --loglevel=error)
 done
