@@ -12,6 +12,7 @@ import "./service/async_task_service/quick_install";
 import { checkDependencies } from "./service/dependencies";
 import * as koa from "./service/http";
 import logger from "./service/log";
+import { setDaemonShuttingDown } from "./service/panel_notifier";
 import * as protocol from "./service/protocol";
 import * as router from "./service/router";
 import { printStartupBanner } from "./service/startup_banner";
@@ -148,6 +149,7 @@ printStartupBanner(config);
 
 let isExiting = false;
 async function listenExitSig(signal: string, isForce = true) {
+  setDaemonShuttingDown();
   if (isExiting && !isForce) {
     logger.warn($t("TXT_CODE_6f862823"));
     return;

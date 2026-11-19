@@ -23,6 +23,7 @@ import instanceGroupService from "./app/service/instance_group_service";
 import SystemRemoteService from "./app/service/remote_service";
 import SystemUser from "./app/service/user_service";
 import versionAdapter from "./app/service/version_adapter";
+import { loadNotificationConfig } from "./app/service/notification_config_service";
 import { initSystemConfig, systemConfig } from "./app/setting";
 import ProxyDataPlane from "./app/service/proxy_data_plane";
 import SocketService from "./app/service/socket_service";
@@ -121,6 +122,13 @@ async function main() {
   if (systemConfig && systemConfig?.redisUrl?.length != 0) {
     await RedisStorage.initialize(systemConfig.redisUrl);
     Storage.setStorageType(Storage.TYPE.REDIS);
+  }
+
+  // Notification settings live in their own record (feature stays disabled when absent)
+  try {
+    await loadNotificationConfig();
+  } catch (err: any) {
+    logger.warn(`Failed to load notification settings: ${err?.name ?? "error"}`);
   }
 
   initVersionManager();
