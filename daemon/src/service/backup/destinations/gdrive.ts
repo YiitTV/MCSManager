@@ -5,6 +5,7 @@ import { Writable } from "stream";
 import { pipeline } from "stream/promises";
 import {
   BACKUP_PART_SIZES,
+  BackupObjectContext,
   BackupDriverCallOptions,
   BackupDriverError,
   BackupDriverErrorCode,
@@ -13,11 +14,11 @@ import {
   BackupPutRequest,
   BackupPutResult,
   BackupTestResult,
-  buildBackupFileName,
+  buildReadableBackupFileName,
   DestinationDriver,
   GDriveDestination,
-  isValidBackupId,
-  sanitizeBackupError
+  sanitizeBackupError,
+  sanitizeBackupInstanceName
 } from "mcsmanager-common";
 import {
   createGoogleTokenProvider,
@@ -32,9 +33,11 @@ import {
 
 const ROOT_FOLDER_NAME = "MCSManager";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+const INSTANCE_UUID_PROPERTY = "mcsmInstanceUuid";
 const DRIVE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_CHUNK_RETRIES = 3;
 const SHARED = "supportsAllDrives=true";
+const pendingFolderLookups = new Map<string, Promise<string>>();
 
 /** Escape a value for use inside a single-quoted Drive `q` string literal. */
 export function escapeDriveQueryLiteral(value: string): string {
@@ -109,7 +112,6 @@ export function createGDriveDriver(destination: GDriveDestination<string>): Dest
   const uploadBase = ep.uploadBase;
   const uploadOrigin = new URL(uploadBase).origin;
   const uploadPathPrefix = new URL(uploadBase).pathname.replace(/\/drive\/v3$/, "");
-  const folderCache = new Map<string, string>();
   const secrets = () => tokens.secrets();
 
   const rootParent = (): string => {
@@ -160,46 +162,82 @@ export function createGDriveDriver(destination: GDriveDestination<string>): Dest
     }
   }
 
-  async function ensureFolder(
+  async function findFolder(
     parentId: string,
-    name: string,
+    filter: string,
     signal?: AbortSignal
-  ): Promise<string> {
-    const key = `${parentId}/${name}`;
-    const cachedId = folderCache.get(key);
-    if (cachedId) return cachedId;
+  ): Promise<string | undefined> {
     const q =
-      `name = '${escapeDriveQueryLiteral(name)}' and '${escapeDriveQueryLiteral(parentId)}' in parents` +
+      `${filter} and '${escapeDriveQueryLiteral(parentId)}' in parents` +
       ` and mimeType = '${FOLDER_MIME}' and trashed = false`;
     const params = new URLSearchParams({
       q,
-      fields: "files(id)",
+      fields: "nextPageToken,files(id)",
       pageSize: "1",
       supportsAllDrives: "true",
       includeItemsFromAllDrives: "true"
     });
-    const { data } = await json(`${apiBase}/files?${params}`, { method: "GET", signal });
-    let id: string | undefined = data?.files?.[0]?.id;
-    if (!id) {
-      const created = await json(`${apiBase}/files?${SHARED}&fields=id`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
-        signal
-      });
-      id = created.data?.id;
-    }
-    checkId(id as string);
-    folderCache.set(key, id as string);
-    return id as string;
+    do {
+      const { data } = await json(`${apiBase}/files?${params}`, { method: "GET", signal });
+      if (data?.files?.length) return checkId(data.files[0].id);
+      if (!data?.nextPageToken) return undefined;
+      params.set("pageToken", data.nextPageToken);
+    } while (true);
   }
 
-  async function ensureInstanceFolder(instanceUuid: string, signal?: AbortSignal): Promise<string> {
-    if (!isValidBackupId(instanceUuid)) {
-      throw new BackupDriverError(BackupDriverErrorCode.FAILED, "Invalid backup object id");
+  function findFolderByName(parentId: string, name: string, signal?: AbortSignal) {
+    return findFolder(parentId, `name = '${escapeDriveQueryLiteral(name)}'`, signal);
+  }
+
+  async function createFolder(
+    parentId: string,
+    name: string,
+    signal?: AbortSignal,
+    appProperties?: Record<string, string>
+  ): Promise<string> {
+    const { data } = await json(`${apiBase}/files?${SHARED}&fields=id`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId], appProperties }),
+      signal
+    });
+    return checkId(data?.id);
+  }
+
+  async function ensureBackupFolder(
+    signal?: AbortSignal,
+    object?: BackupObjectContext
+  ): Promise<string> {
+    const parent = rootParent();
+    const safeName = object && sanitizeBackupInstanceName(object.instanceName, object.instanceUuid);
+    const key = `${apiBase}/${parent}`;
+    // Jobs in the same daemon can upload concurrently through separate driver instances.
+    const previous = pendingFolderLookups.get(key);
+    const lookup = (async () => {
+      await previous?.catch(() => undefined);
+      const root =
+        (await findFolderByName(parent, ROOT_FOLDER_NAME, signal)) ??
+        (await createFolder(parent, ROOT_FOLDER_NAME, signal));
+      if (!object || !safeName) return root;
+
+      const { instanceUuid } = object;
+      const filter = `appProperties has { key='${INSTANCE_UUID_PROPERTY}' and value='${escapeDriveQueryLiteral(instanceUuid)}' }`;
+      const existing = await findFolder(root, filter, signal);
+      if (existing) return existing;
+
+      let name = safeName;
+      if (await findFolderByName(root, name, signal)) {
+        name = `${safeName} (${instanceUuid.slice(0, 8)})`;
+        if (await findFolderByName(root, name, signal)) name = `${safeName} (${instanceUuid})`;
+      }
+      return createFolder(root, name, signal, { [INSTANCE_UUID_PROPERTY]: instanceUuid });
+    })();
+    pendingFolderLookups.set(key, lookup);
+    try {
+      return await lookup;
+    } finally {
+      if (pendingFolderLookups.get(key) === lookup) pendingFolderLookups.delete(key);
     }
-    const root = await ensureFolder(rootParent(), ROOT_FOLDER_NAME, signal);
-    return ensureFolder(root, instanceUuid, signal);
   }
 
   function validateSessionUri(location: unknown): string {
@@ -471,7 +509,7 @@ export function createGDriveDriver(destination: GDriveDestination<string>): Dest
     async test(options): Promise<BackupTestResult> {
       try {
         const signal = options?.signal;
-        const parent = await ensureFolder(rootParent(), ROOT_FOLDER_NAME, signal);
+        const parent = await ensureBackupFolder(signal);
         const marker = Buffer.from(crypto.randomBytes(16).toString("hex"));
         const name = `.mcsm_test_${crypto.randomBytes(6).toString("hex")}`;
         const { id } = await uploadResumable(
@@ -517,8 +555,8 @@ export function createGDriveDriver(destination: GDriveDestination<string>): Dest
 
     put(request: BackupPutRequest): Promise<BackupPutResult> {
       return wrap(async () => {
-        const fileName = buildBackupFileName(request.object.planId, request.object.backupId);
-        const parent = await ensureInstanceFolder(request.object.instanceUuid, request.signal);
+        const fileName = buildReadableBackupFileName(request.object);
+        const parent = await ensureBackupFolder(request.signal, request.object);
         const handle = await fs.promises.open(request.filePath, "r");
         try {
           const st = await handle.stat();

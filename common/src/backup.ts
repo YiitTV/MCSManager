@@ -557,11 +557,14 @@ export class BackupDriverError extends Error {
   }
 }
 
-/** Identifies the object a driver creates. Drivers build their remote key ONLY from these ids. */
+/** Identifies the object a driver creates and provides optional display metadata. */
 export interface BackupObjectContext {
   instanceUuid: string;
   planId: string;
   backupId: string;
+  instanceName?: string;
+  /** Backup creation time in epoch milliseconds. */
+  createdAt?: number;
 }
 
 /** Progress callback: `doneBytes` of `totalBytes` transferred so far (monotonic). */
@@ -581,7 +584,7 @@ export interface BackupPutRequest extends BackupDriverCallOptions {
   sizeBytes: number;
   /** Lowercase hex SHA-256 of the file (informational; may be stored as object metadata). */
   sha256: string;
-  /** Ids used to derive the remote key (see `buildBackupObjectName`). */
+  /** Ids and display metadata used to name the new object. */
   object: BackupObjectContext;
   /** Called as bytes are sent. */
   onProgress?: BackupProgressCallback;
@@ -867,12 +870,48 @@ export function buildBackupObjectName(object: BackupObjectContext): string {
   return `${object.instanceUuid}/${object.planId}/${object.backupId}${BACKUP_ARCHIVE.EXTENSION}`;
 }
 
-/** Flat file name `<planId>_<backupId>.zip` (used for local files and download names). */
+/** Flat file name `<planId>_<backupId>.zip` (used for downloads and legacy callers). */
 export function buildBackupFileName(planId: string, backupId: string): string {
   if (!isValidBackupId(planId) || !isValidBackupId(backupId)) {
     throw new Error("Invalid backup file id");
   }
   return `${planId}_${backupId}${BACKUP_ARCHIVE.EXTENSION}`;
+}
+
+// Windows reserves these names even when followed by an extension.
+const DEVICE_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]) *\./i;
+
+export function sanitizeBackupInstanceName(
+  instanceName: string | undefined,
+  instanceUuid: string
+): string {
+  if (!isValidBackupId(instanceUuid)) throw new Error("Invalid backup object id");
+  let name = (instanceName ?? "").replace(/[^\p{L}\p{Nd} _.-]/gu, "_").trim();
+  if (DEVICE_NAME.test(name)) name = `_${name}`;
+
+  // Leave room for the 28-byte timestamp, id suffix and extension on 255-byte filesystems.
+  let prefix = "";
+  let bytes = 0;
+  let chars = 0;
+  for (const char of name) {
+    bytes += Buffer.byteLength(char);
+    if (++chars > 60 || bytes > 227) break;
+    prefix += char;
+  }
+  prefix = prefix.trimEnd();
+  return !prefix || prefix === "." || prefix === ".." ? instanceUuid.slice(0, 8) : prefix;
+}
+
+/** Display name for Drive and local copies, with a stable name across upload retries. */
+export function buildReadableBackupFileName(object: BackupObjectContext): string {
+  const legacyName = buildBackupFileName(object.planId, object.backupId);
+  if (object.createdAt === undefined) return legacyName;
+  const name = sanitizeBackupInstanceName(object.instanceName, object.instanceUuid);
+  const iso = new Date(object.createdAt).toISOString();
+  if (iso.length !== 24) throw new Error("Invalid backup creation year");
+  const timestamp = iso.slice(0, 16).replace("T", "_").replace(":", "-");
+  const suffix = object.backupId.slice(0, 6);
+  return `${name}_${timestamp}_${suffix}${BACKUP_ARCHIVE.EXTENSION}`;
 }
 
 /** S3 multipart part size for a file: 8 MiB, or 16 MiB if 8 MiB parts would exceed 10000 parts. */

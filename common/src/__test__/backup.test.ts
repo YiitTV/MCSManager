@@ -11,6 +11,7 @@ import {
   BackupRecord,
   buildBackupFileName,
   buildBackupObjectName,
+  buildReadableBackupFileName,
   backupScheduleName,
   chooseS3PartSize,
   expandBackupPreset,
@@ -18,6 +19,7 @@ import {
   isValidBackupId,
   redactRecordForUser,
   sanitizeBackupError,
+  sanitizeBackupInstanceName,
   stripSecrets,
   validateExcludeGlobs,
   validateIncludePaths,
@@ -176,6 +178,37 @@ describe("ids and names", () => {
       buildBackupObjectName({ instanceUuid: "../x", planId: "p", backupId: "b" })
     ).toThrow();
     expect(() => buildBackupFileName("p", "b/c")).toThrow();
+  });
+
+  it.each([
+    ["  Çığ Şöléni İÜ-12_v.2  ", "Çığ Şöléni İÜ-12_v.2"],
+    ["../a\\b/🎮", ".._a_b__"],
+    ["..", "instance"],
+    [".", "instance"],
+    ["   ", "instance"],
+    [undefined, "instance"],
+    ["a".repeat(61), "a".repeat(60)],
+    ["NUL.server", "_NUL.server"]
+  ])("sanitizes %s to %s", (name, expected) => {
+    expect(sanitizeBackupInstanceName(name, "instance123")).toBe(expected);
+  });
+
+  it("builds a readable name using UTC minutes and the backup id prefix", () => {
+    const object = { instanceUuid: "instance123", planId: "p", backupId: "2c2ff8-123" };
+    expect(buildReadableBackupFileName(object)).toBe("p_2c2ff8-123.zip");
+    expect(
+      buildReadableBackupFileName({
+        ...object,
+        instanceName: "Lobi",
+        createdAt: Date.parse("2026-11-19T19:00:59+03:00")
+      })
+    ).toBe("Lobi_2026-11-19_16-00_2c2ff8.zip");
+    const maxWidthName = buildReadableBackupFileName({
+      ...object,
+      instanceName: "𐐀".repeat(60),
+      createdAt: 0
+    });
+    expect(maxWidthName).toBe(`${"𐐀".repeat(56)}_1970-01-01_00-00_2c2ff8.zip`);
   });
 });
 

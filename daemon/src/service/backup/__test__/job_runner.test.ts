@@ -274,11 +274,16 @@ describe("backup job", () => {
   it("archives to every destination, records, and emits one finished event", async () => {
     const s3 = new FakeDriver("s3");
     drivers = { s3a: s3 };
-    const { runner, queue } = makeRunner();
+    const createdAt = Date.UTC(2026, 10, 19, 16);
+    const { runner, queue } = makeRunner({ now: () => createdAt });
     const { backupId } = runner.enqueueBackup(req([dest("local", "local"), dest("s3a")]));
     await queue.whenIdle();
     const rec = store.get("inst1", backupId)!;
     expect(rec.copies.local.status).toBe("ok");
+    expect(rec.createdAt).toBe(createdAt);
+    expect(rec.copies.local.remoteId).toBe(
+      `My Server_2026-11-19_16-00_${backupId.slice(0, 6)}.zip`
+    );
     expect(rec.copies.s3a.status).toBe("ok");
     expect(rec.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(await fs.pathExists(path.join(localDir, rec.copies.local.remoteId!))).toBe(true);
@@ -295,10 +300,14 @@ describe("backup job", () => {
     s3.failPutWith = BackupDriverErrorCode.AUTH;
     drivers = { s3a: s3 };
     const { runner, queue } = makeRunner();
-    const { backupId } = runner.enqueueBackup(req([dest("local", "local"), dest("s3a")]));
+    const { backupId } = runner.enqueueBackup({
+      ...req([dest("local", "local"), dest("s3a")]),
+      instanceName: "Request Name"
+    });
     await queue.whenIdle();
     const rec = store.get("inst1", backupId)!;
     expect(rec.copies.local.status).toBe("ok");
+    expect(rec.copies.local.remoteId).toMatch(/^Request Name_/);
     expect(rec.copies.s3a.status).toBe("failed");
     expect(rec.copies.s3a.error).toBeTruthy();
     expect(finished()).toHaveLength(1);
@@ -307,7 +316,7 @@ describe("backup job", () => {
     expect(rec.warnings).toHaveLength(1);
     expect(rec.warnings[0]).toMatch(/^destination_failed: s3a: /);
     expect(finished()[0].record.warnings).toEqual(rec.warnings);
-    expect(finished()[0].instanceName).toBe("My Server");
+    expect(finished()[0].instanceName).toBe("Request Name");
   });
 
   it("all destinations failed: failed event with a summary, no secrets anywhere", async () => {
@@ -629,8 +638,9 @@ describe("restore job", () => {
   it("download resolution finds the local copy only", async () => {
     const { runner, backupId } = await backup([dest("local", "local")]);
     const res = await runner.resolveLocalCopy("inst1", backupId);
-    expect(res.fileName).toMatch(/^plan1_.+\.zip$/);
-    expect(res.filePath.startsWith(localDir)).toBe(true);
+    const remoteId = store.get("inst1", backupId)!.copies.local.remoteId!;
+    expect(res.fileName).toBe(remoteId);
+    expect(res.filePath).toBe(path.join(localDir, remoteId));
     await expect(runner.resolveLocalCopy("inst1", "nope")).rejects.toThrow();
   });
 });

@@ -161,16 +161,23 @@ export class FakeGoogle {
 
     if (url.pathname === "/drive/v3/files" && method === "GET") {
       const q = url.searchParams.get("q") ?? "";
-      const m = q.match(
-        /^name = '((?:[^'\\]|\\.)*)' and '((?:[^'\\]|\\.)*)' in parents and mimeType = '([^']+)' and trashed = false$/
+      const scope = q.match(
+        /^(.*) and '((?:[^'\\]|\\.)*)' in parents and mimeType = '([^']+)' and trashed = false$/
       );
-      if (!m) return this.err(res, 400, "invalidQuery");
+      if (!scope) return this.err(res, 400, "invalidQuery");
+      const name = scope[1].match(/^name = '((?:[^'\\]|\\.)*)'$/);
+      const property = scope[1].match(
+        /^appProperties has \{ key='([^']+)' and value='((?:[^'\\]|\\.)*)' \}$/
+      );
+      if (!name && !property) return this.err(res, 400, "invalidQuery");
       const unesc = (s: string) => s.replace(/\\(.)/g, "$1");
       const files = [...this.files.values()].filter(
         (f) =>
-          f.name === unesc(m[1]) &&
-          f.parents.includes(unesc(m[2])) &&
-          f.mimeType === m[3] &&
+          (name
+            ? f.name === unesc(name[1])
+            : f.appProperties?.[property![1]] === unesc(property![2])) &&
+          f.parents.includes(unesc(scope[2])) &&
+          f.mimeType === scope[3] &&
           !f.trashed
       );
       return this.send(res, 200, { files: files.slice(0, 1).map((f) => ({ id: f.id })) });
@@ -182,6 +189,7 @@ export class FakeGoogle {
         name: meta.name,
         parents: meta.parents ?? [],
         mimeType: meta.mimeType,
+        appProperties: meta.appProperties,
         data: Buffer.alloc(0),
         size: 0,
         trashed: false
