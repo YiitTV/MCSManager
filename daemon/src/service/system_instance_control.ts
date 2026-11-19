@@ -111,6 +111,13 @@ class InstanceControlSubsystem {
 
   public registerScheduleJob(task: IScheduleTask, needStore = true) {
     const key = `${task.instanceUuid}`;
+    if (
+      needStore &&
+      task.actions?.some((action) => action?.type === ScheduleActionTypeEnum.Backup) &&
+      !InstanceSubsystem.getInstance(key)
+    ) {
+      throw new Error($t("TXT_CODE_3bfb9e04"));
+    }
     if (!this.taskMap.has(key)) {
       this.taskMap.set(key, []);
     }
@@ -219,10 +226,14 @@ class InstanceControlSubsystem {
 
       // If the instance has been deleted, it needs to be automatically destroyed
       if (!instance || !instance?.config) {
-        return this.deleteScheduleTask(task.instanceUuid, task.name);
+        if (!InstanceSubsystem.exists(instanceUuid)) {
+          this.deleteScheduleTask(instanceUuid, task.name);
+        }
+        return;
       }
 
       for (const action of actions) {
+        if (InstanceSubsystem.getInstance(instanceUuid) !== instance) return;
         const actionType = action.type;
         const payload = action.payload;
         const instanceStatus = instance.status();
@@ -283,6 +294,7 @@ class InstanceControlSubsystem {
       tasks.forEach((v) => {
         this.deleteScheduleTask(instanceUuid, v.name);
       });
+    this.taskMap.delete(instanceUuid);
   }
 
   public deleteScheduleTask(instanceUuid: string, name: string) {

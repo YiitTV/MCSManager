@@ -1,8 +1,9 @@
+import archiver from "archiver";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
 import StreamZip from "node-stream-zip";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BackupErrorCode } from "mcsmanager-common";
 import { createArchive, lowerPriority, scanInstanceFiles } from "../archiver";
 import { BackupError } from "../errors";
@@ -119,6 +120,28 @@ describe("createArchive", () => {
     });
     await expect(p).rejects.toMatchObject({ code: BackupErrorCode.CANCELLED });
     expect(await fs.pathExists(path.join(work, "a.zip.tmp"))).toBe(false);
+  });
+
+  it("removes the staging file when cancelled during finalization", async () => {
+    await fs.outputFile(path.join(root, "world/level.dat"), "data");
+    const controller = new AbortController();
+    const create = archiver.create;
+    const spy = vi.spyOn(archiver, "create").mockImplementationOnce((...args) => {
+      const archive = create(...args);
+      archive.finalize = () => {
+        controller.abort();
+        return new Promise<void>(() => {});
+      };
+      return archive;
+    });
+    try {
+      await expect(build({ signal: controller.signal })).rejects.toMatchObject({
+        code: BackupErrorCode.CANCELLED
+      });
+      expect(await fs.pathExists(path.join(work, "a.zip.tmp"))).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("does not buffer large files (sparse file)", async () => {

@@ -61,4 +61,5 @@ export function assertLocalDirectoryAllowed(directory: string, policy: LocalDirP
       refuse("inside_daemon_data");
     }
   }
+  return resolved;
 }

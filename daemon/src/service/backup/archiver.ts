@@ -180,6 +180,7 @@ export async function createArchive(options: ArchiveOptions): Promise<ArchiveRes
   // Illegal include paths fail before any file or staging file is touched.
   for (const inc of options.include) resolveIncludePath(options.rootDir, inc);
   await fs.ensureDir(path.dirname(options.outPath));
+  throwIfAborted(signal);
 
   const archive = archiver("zip", {
     zlib: { level: BACKUP_ARCHIVE.ZLIB_LEVEL },
@@ -189,23 +190,33 @@ export async function createArchive(options: ArchiveOptions): Promise<ArchiveRes
   const out = fs.createWriteStream(options.outPath, { flags: "w", mode: 0o600 });
 
   let failure: Error | undefined;
+  let waiter: (() => void) | undefined;
+  const fail = (err: Error) => {
+    failure ??= err;
+    waiter?.();
+  };
   const piped = new Promise<void>((resolve, reject) => {
-    pipeline(archive, hasher, out, (err) => (err ? reject(err) : resolve()));
+    pipeline(archive, hasher, out, (err) => {
+      if (!err) return resolve();
+      fail(err);
+      reject(err);
+    });
   });
   piped.catch(() => undefined);
   archive.on("warning", (err: any) => {
     // ENOENT: a file vanished between the walk and the read; everything else is fatal.
-    if (err?.code !== "ENOENT") failure = err;
+    if (err?.code !== "ENOENT") fail(err);
   });
   const onAbort = () => {
-    failure = abortError(signal);
-    archive.destroy(failure);
+    const err = abortError(signal);
+    fail(err);
+    out.destroy(err);
+    archive.destroy(err);
   };
   signal?.addEventListener("abort", onAbort, { once: true });
 
   let appended = 0;
   let entered = 0;
-  let waiter: (() => void) | undefined;
   archive.on("entry", () => {
     entered++;
     if (waiter && appended - entered < MAX_PENDING_ENTRIES) {
@@ -231,16 +242,9 @@ export async function createArchive(options: ArchiveOptions): Promise<ArchiveRes
         options.onProgress?.(doneBytes, options.totalBytes ?? 0);
       }
       appended++;
-      if (appended - entered >= MAX_PENDING_ENTRIES) {
+      if (!failure && appended - entered >= MAX_PENDING_ENTRIES) {
         await new Promise<void>((resolve) => {
           waiter = resolve;
-          // Re-check in case the archive finished meanwhile or failed.
-          setImmediate(() => {
-            if (failure && waiter) {
-              waiter = undefined;
-              resolve();
-            }
-          });
         });
       }
     }
@@ -248,8 +252,8 @@ export async function createArchive(options: ArchiveOptions): Promise<ArchiveRes
     if (fileCount === 0 && appended === 0) {
       throw new BackupError(BackupErrorCode.NOTHING_TO_BACKUP, "No include path exists");
     }
-    await archive.finalize();
-    await piped;
+    // Aborting the output stream can reject it while archiver's finalize promise stays pending.
+    await Promise.all([archive.finalize(), piped]);
     if (failure) throw failure;
   } catch (err) {
     archive.destroy();

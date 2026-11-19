@@ -155,6 +155,121 @@ beforeEach(async () => {
 });
 afterEach(() => fs.remove(base));
 
+describe("instance backup cleanup", () => {
+  it("deletes only indexed local copies and drops only the deleted instance's index", async () => {
+    const remote = new FakeDriver("s3");
+    drivers = { remote };
+    const { runner, queue } = makeRunner();
+    const { backupId } = runner.enqueueBackup(req([dest("local", "local"), dest("remote")]));
+    await queue.whenIdle();
+    const record = store.get("inst1", backupId)!;
+    const archive = record.copies.local.remoteId!;
+    const otherDir = path.join(base, "new-local");
+    await store.rememberLocalDir("local", otherDir);
+    await fs.outputFile(path.join(otherDir, archive), "same name, different directory");
+    await fs.outputFile(path.join(localDir, "unrelated.zip"), "unrelated");
+    await fs.outputFile(path.join(localDir, "other.zip"), "other instance");
+    await store.add("other", {
+      ...record,
+      copies: { local: { ...record.copies.local, remoteId: "other.zip" } }
+    });
+    expect(runner.records("inst1")[0].copies.local).not.toHaveProperty("localDirectory");
+    expect(finished()[0].record.copies.local).not.toHaveProperty("localDirectory");
+
+    await runner.removeInstanceBackups("inst1", true);
+
+    expect(store.listInstances()).toEqual(["other"]);
+    expect(await fs.readdir(localDir)).toEqual(["other.zip", "unrelated.zip"]);
+    expect(await fs.readFile(path.join(otherDir, archive), "utf8")).toBe(
+      "same name, different directory"
+    );
+    expect(remote.objects.size).toBe(1);
+    expect(remote.removed).toEqual([]);
+  });
+
+  it("keeps archives and their index when instance files are kept", async () => {
+    const { runner, queue } = makeRunner();
+    const { backupId } = runner.enqueueBackup(req([dest("local", "local")]));
+    await queue.whenIdle();
+    const archive = store.get("inst1", backupId)!.copies.local.remoteId!;
+
+    await runner.removeInstanceBackups("inst1", false);
+
+    expect(store.listInstances()).toEqual(["inst1"]);
+    expect(await fs.readdir(localDir)).toEqual([archive]);
+  });
+
+  it("uses the saved destination directory for older indexes", async () => {
+    const { runner, queue } = makeRunner();
+    const { backupId } = runner.enqueueBackup(req([dest("local", "local")]));
+    await queue.whenIdle();
+    const directory = await fs.realpath(localDir);
+    await store.rememberLocalDir("local", directory);
+    await store.mutate("inst1", ([record]) => {
+      delete record.copies.local.localDirectory;
+    });
+
+    await runner.removeInstanceBackups("inst1", true);
+
+    expect(store.get("inst1", backupId)).toBeUndefined();
+    expect(await fs.readdir(localDir)).toEqual([]);
+  });
+
+  it("refuses a recorded destination redirected outside its directory", async () => {
+    const { runner, queue } = makeRunner();
+    const { backupId } = runner.enqueueBackup(req([dest("local", "local")]));
+    await queue.whenIdle();
+    const archive = store.get("inst1", backupId)!.copies.local.remoteId!;
+    const outside = path.join(base, "outside");
+    await fs.rename(localDir, outside);
+    await fs.symlink(outside, localDir, "junction");
+
+    await expect(runner.removeInstanceBackups("inst1", true)).rejects.toThrow(
+      "Local backup directory resolves outside its recorded path"
+    );
+    expect(await fs.pathExists(path.join(outside, archive))).toBe(true);
+    expect(store.listInstances()).toEqual(["inst1"]);
+  });
+
+  it("waits for the running backup and cancels its queued backup and restore", async () => {
+    const slow = new FakeDriver("s3");
+    drivers = { slow };
+    const { runner, queue } = makeRunner();
+    const { backupId: recordId } = runner.enqueueBackup(req([dest("local", "local")]));
+    await queue.whenIdle();
+    slow.putDelayMs = 10_000;
+    const enteredUpload = new Promise<void>((resolve) => {
+      const put = slow.put.bind(slow);
+      vi.spyOn(slow, "put").mockImplementation((request) => {
+        resolve();
+        return put(request);
+      });
+    });
+    const running = runner.enqueueBackup(req([dest("slow")]));
+    await enteredUpload;
+    const queued = runner.enqueueBackup(req([dest("slow")]));
+    const restore = runner.enqueueRestore({ instanceUuid: "inst1", recordId, destinations: [] });
+
+    await runner.removeInstanceBackups("inst1", true);
+
+    expect(runner.status("inst1")).toEqual({ queued: [], running: undefined });
+    expect(store.listInstances()).toEqual([]);
+    expect(store.listInflight()).toEqual([]);
+    expect(await fs.readdir(staging)).toEqual([]);
+    expect(slow.putCalls).toBe(1);
+    const cancelled = finished()
+      .filter((event) => event.errorCode === BackupErrorCode.CANCELLED)
+      .map((event) => event.record.id);
+    expect(cancelled).toEqual([queued.backupId, running.backupId]);
+    expect(
+      events.some(
+        ({ payload }) =>
+          payload.jobId === restore.jobId && payload.errorCode === BackupErrorCode.CANCELLED
+      )
+    ).toBe(true);
+  });
+});
+
 describe("backup job", () => {
   it("archives to every destination, records, and emits one finished event", async () => {
     const s3 = new FakeDriver("s3");

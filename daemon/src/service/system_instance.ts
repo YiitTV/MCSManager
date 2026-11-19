@@ -15,6 +15,7 @@ import Instance, {
 import InstanceConfig from "../entity/instance/Instance_config";
 import { $t } from "../i18n";
 import { sleep } from "../utils/sleep";
+import { getBackupRunner } from "./backup/service";
 import logger from "./log";
 import { setDaemonShuttingDown } from "./panel_notifier";
 import InstanceControl from "./system_instance_control";
@@ -27,6 +28,7 @@ class InstanceSubsystem extends EventEmitter {
 
   public readonly instances = new Map<string, Instance>();
   public readonly instanceStream = new InstanceStreamListener();
+  private readonly removingInstances = new Set<string>();
   private instanceDataDir = "";
 
   constructor() {
@@ -213,18 +215,46 @@ class InstanceSubsystem extends EventEmitter {
     });
   }
 
-  removeInstance(instanceUuid: string, deleteFile: boolean) {
-    const instance = this.getInstance(instanceUuid);
-    if (instance) {
+  async removeInstances(instanceUuids: string[], deleteFile: boolean) {
+    const targets = [...new Set(instanceUuids)].map((instanceUuid) => {
+      const instance = this.getInstance(instanceUuid);
+      if (!instance) throw new Error($t("TXT_CODE_3bfb9e04"));
       if (instance.status() !== Instance.STATUS_STOP) throw new Error($t("TXT_CODE_fb547313"));
-      instance.destroy();
-      this.instances.delete(instanceUuid);
-      StorageSubsystem.delete("InstanceConfig", instanceUuid);
-      InstanceControl.deleteInstanceAllTask(instanceUuid);
-      if (deleteFile) fs.remove(instance.absoluteCwdPath(), (err) => {});
-      return true;
+      return {
+        instance,
+        instanceUuid,
+        directory: deleteFile ? instance.absoluteCwdPath() : undefined
+      };
+    });
+    for (const { instanceUuid } of targets) this.removingInstances.add(instanceUuid);
+    try {
+      // Finish backup cleanup before unregistering any instance in the batch.
+      const cleanup = await Promise.allSettled(
+        targets.map(({ instanceUuid }) =>
+          getBackupRunner().removeInstanceBackups(instanceUuid, deleteFile)
+        )
+      );
+      for (const result of cleanup) {
+        if (result.status === "rejected") throw result.reason;
+      }
+      return targets.map(({ instance, instanceUuid, directory }) => {
+        instance.destroy();
+        this.instances.delete(instanceUuid);
+        StorageSubsystem.delete("InstanceConfig", instanceUuid);
+        InstanceControl.deleteInstanceAllTask(instanceUuid);
+        if (directory) {
+          void fs.remove(directory).catch((err) => {
+            logger.error(`Failed to remove files for instance ${instanceUuid}: ${err}`);
+          });
+        }
+        return { instanceUuid, nickname: instance.config.nickname };
+      });
+    } catch (err) {
+      logger.error(`Failed to delete instances ${instanceUuids.join(", ")}: ${err}`);
+      throw err;
+    } finally {
+      for (const { instanceUuid } of targets) this.removingInstances.delete(instanceUuid);
     }
-    throw new Error($t("TXT_CODE_3bfb9e04"));
   }
 
   forward(targetInstanceUuid: string, socket: Socket) {
@@ -249,6 +279,7 @@ class InstanceSubsystem extends EventEmitter {
   }
 
   getInstance(instanceUuid: string) {
+    if (this.removingInstances.has(instanceUuid)) return undefined;
     return this.instances.get(instanceUuid);
   }
 

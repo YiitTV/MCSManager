@@ -390,22 +390,12 @@ routerApp.on("instance/command", async (ctx, data) => {
 });
 
 // delete instance
-routerApp.on("instance/delete", (ctx, data) => {
+routerApp.on("instance/delete", async (ctx, data) => {
   const instanceUuids = data.instanceUuids;
-  const deleteFile = data.deleteFile;
+  const deleteFile = data.deleteFile === true;
   try {
-    const instances = instanceUuids.map((instanceUuid: string) => {
-      const instance = InstanceSubsystem.getInstance(instanceUuid);
-      if (!instance) throw new Error($t("TXT_CODE_3bfb9e04"));
-      if (instance.status() !== Instance.STATUS_STOP) throw new Error($t("TXT_CODE_fb547313"));
-      return {
-        instanceUuid: instance.instanceUuid,
-        nickname: instance.config.nickname
-      };
-    });
-    for (const instanceUuid of instanceUuids) {
-      InstanceSubsystem.removeInstance(instanceUuid, deleteFile);
-    }
+    if (!Array.isArray(instanceUuids)) throw new Error($t("TXT_CODE_3bfb9e04"));
+    const instances = await InstanceSubsystem.removeInstances(instanceUuids, deleteFile);
     protocol.msg(ctx, "instance/delete", { instanceUuids, instances });
   } catch (err: any) {
     protocol.error(ctx, "instance/delete", { err: err.message });

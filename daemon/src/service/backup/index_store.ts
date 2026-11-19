@@ -1,6 +1,7 @@
 import {
   BACKUP_LIMITS,
   BackupErrorCode,
+  BackupCopyResult,
   BackupFinishedPayload,
   BackupRecord,
   isValidBackupId
@@ -22,8 +23,17 @@ const RESERVED_LOCAL_DIRS = "local_dirs";
 const RESERVED = new Set([RESERVED_INFLIGHT, RESERVED_PENDING, RESERVED_LOCAL_DIRS]);
 const MAX_PENDING_EVENTS = 200;
 
+export interface StoredBackupCopy extends BackupCopyResult {
+  /** Physical directory at the time of upload. Kept in daemon storage only. */
+  localDirectory?: string;
+}
+
+export interface StoredBackupRecord extends BackupRecord {
+  copies: Record<string, StoredBackupCopy>;
+}
+
 class IndexFile {
-  records: BackupRecord[] = [];
+  records: StoredBackupRecord[] = [];
 }
 class InflightFile {
   jobs: InflightJob[] = [];
@@ -32,7 +42,7 @@ class PendingFile {
   events: BackupFinishedPayload[] = [];
 }
 class LocalDirsFile {
-  dirs: Record<string, string> = {};
+  entries?: [string, string][] = undefined;
 }
 
 /** Job that was running; persisted by id only (no secrets) for restart recovery. */
@@ -58,7 +68,8 @@ export class BackupIndexStore {
 
   constructor(
     private readonly storage: BackupStorage,
-    private readonly maxRecords: number = BACKUP_LIMITS.MAX_RECORDS_PER_INSTANCE
+    private readonly maxRecords: number = BACKUP_LIMITS.MAX_RECORDS_PER_INSTANCE,
+    private readonly readLegacyLocalDirs: () => Record<string, string> = () => ({})
   ) {}
 
   private checkKey(instanceUuid: string) {
@@ -79,7 +90,7 @@ export class BackupIndexStore {
     return next;
   }
 
-  private read(instanceUuid: string): BackupRecord[] {
+  private read(instanceUuid: string): StoredBackupRecord[] {
     const file = this.storage.load(
       BACKUP_INDEX_CATEGORY,
       IndexFile,
@@ -88,17 +99,17 @@ export class BackupIndexStore {
     return file?.records ? [...file.records] : [];
   }
 
-  private write(instanceUuid: string, records: BackupRecord[]) {
+  private write(instanceUuid: string, records: StoredBackupRecord[]) {
     this.storage.store(BACKUP_INDEX_CATEGORY, instanceUuid, { records });
   }
 
   /** Records newest first. */
-  list(instanceUuid: string): BackupRecord[] {
+  list(instanceUuid: string): StoredBackupRecord[] {
     this.checkKey(instanceUuid);
     return this.read(instanceUuid).sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  get(instanceUuid: string, recordId: string): BackupRecord | undefined {
+  get(instanceUuid: string, recordId: string): StoredBackupRecord | undefined {
     return this.list(instanceUuid).find((r) => r.id === recordId);
   }
 
@@ -116,7 +127,7 @@ export class BackupIndexStore {
   }
 
   /** Add a record. Returns false (and stores nothing) when full and nothing is droppable. */
-  add(instanceUuid: string, record: BackupRecord): Promise<boolean> {
+  add(instanceUuid: string, record: StoredBackupRecord): Promise<boolean> {
     this.checkKey(instanceUuid);
     return this.serialise(instanceUuid, () => {
       const records = this.read(instanceUuid).filter((r) => r.id !== record.id);
@@ -132,7 +143,7 @@ export class BackupIndexStore {
   }
 
   /** Atomically mutate the record list (serialised). `fn` may mutate in place. */
-  mutate<T>(instanceUuid: string, fn: (records: BackupRecord[]) => T): Promise<T> {
+  mutate<T>(instanceUuid: string, fn: (records: StoredBackupRecord[]) => T): Promise<T> {
     this.checkKey(instanceUuid);
     return this.serialise(instanceUuid, () => {
       const records = this.read(instanceUuid);
@@ -214,7 +225,9 @@ export class BackupIndexStore {
       const dirs = this.getLocalDirs();
       if (dirs[destinationId] === directory) return;
       dirs[destinationId] = directory;
-      this.storage.store(BACKUP_INDEX_CATEGORY, RESERVED_LOCAL_DIRS, { dirs });
+      this.storage.store(BACKUP_INDEX_CATEGORY, RESERVED_LOCAL_DIRS, {
+        entries: Object.entries(dirs)
+      });
     });
   }
 
@@ -224,7 +237,7 @@ export class BackupIndexStore {
       LocalDirsFile,
       RESERVED_LOCAL_DIRS
     ) as LocalDirsFile | null;
-    return f?.dirs ? { ...f.dirs } : {};
+    return f?.entries ? Object.fromEntries(f.entries) : this.readLegacyLocalDirs();
   }
 
   /** Instance uuids that have an index file. */
