@@ -469,6 +469,7 @@ export class BackupJobRunner {
     driver: DestinationDriver,
     dest: PlainBackupDestination,
     meta: JobMeta,
+    createdAt: number,
     archive: { path: string; sizeBytes: number; sha256: string },
     ctx: JobContext
   ): Promise<string> {
@@ -482,7 +483,9 @@ export class BackupJobRunner {
           object: {
             instanceUuid: meta.instanceUuid,
             planId: meta.plan.id,
-            backupId: meta.backupId
+            backupId: meta.backupId,
+            instanceName: meta.instanceName,
+            createdAt
           },
           signal: ctx.signal,
           onProgress: (done, total) => ctx.setProgress(done, total)
@@ -609,6 +612,7 @@ export class BackupJobRunner {
             driver,
             dest,
             meta,
+            startedAt,
             { path: staging, sizeBytes: size, sha256 },
             ctx
           );

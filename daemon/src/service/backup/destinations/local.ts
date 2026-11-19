@@ -11,16 +11,17 @@ import {
   BackupPutRequest,
   BackupPutResult,
   BackupTestResult,
-  buildBackupFileName,
+  buildReadableBackupFileName,
   DestinationDriver,
   LocalDestination,
   sanitizeBackupError
 } from "mcsmanager-common";
 import { defaultStatfs, freeBytes } from "../disk_check";
 
-/** remoteId of a local copy: a flat file name `<planId>_<backupId>.zip`. */
-const REMOTE_ID_RE = /^[A-Za-z0-9_-]{1,129}\.zip$/;
-const TMP_SUFFIX = ".part";
+const LEGACY_REMOTE_ID_RE = /^[A-Za-z0-9_-]{1,129}\.zip$/;
+const READABLE_REMOTE_ID_RE =
+  /^[\p{L}\p{Nd}_. -]{1,60}_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}_[A-Za-z0-9_-]{1,6}\.zip$/u;
+const DEVICE_NAME_RE = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]) *\./i;
 
 function fail(code: BackupDriverErrorCode, message: string): never {
   throw new BackupDriverError(code, message);
@@ -29,6 +30,9 @@ function fail(code: BackupDriverErrorCode, message: string): never {
 function mapFsError(err: any): BackupDriverError {
   if (err instanceof BackupDriverError) return err;
   const code = err?.code;
+  if (code === "EEXIST") {
+    return new BackupDriverError(BackupDriverErrorCode.FAILED, "Backup file already exists");
+  }
   if (code === "ENOSPC" || code === "EDQUOT") {
     return new BackupDriverError(BackupDriverErrorCode.QUOTA, "No space left on the destination");
   }
@@ -53,7 +57,12 @@ function throwIfAborted(signal?: AbortSignal) {
 
 /** Absolute path of a local copy; throws for ids that are not plain `<name>.zip` file names. */
 export function resolveLocalCopyPath(directory: string, remoteId: string): string {
-  if (typeof remoteId !== "string" || !REMOTE_ID_RE.test(remoteId)) {
+  if (
+    typeof remoteId !== "string" ||
+    Buffer.byteLength(remoteId) > 255 ||
+    DEVICE_NAME_RE.test(remoteId) ||
+    !(LEGACY_REMOTE_ID_RE.test(remoteId) || READABLE_REMOTE_ID_RE.test(remoteId))
+  ) {
     fail(BackupDriverErrorCode.FAILED, "Invalid local backup id");
   }
   return path.join(path.resolve(directory), remoteId);
@@ -96,12 +105,11 @@ export function createLocalDriver(destination: LocalDestination<string>): Destin
 
     async put(request: BackupPutRequest): Promise<BackupPutResult> {
       throwIfAborted(request.signal);
-      const name = buildBackupFileName(request.object.planId, request.object.backupId);
+      const name = buildReadableBackupFileName(request.object);
       const finalPath = resolveLocalCopyPath(directory, name);
-      const tmpPath = finalPath + TMP_SUFFIX;
+      const tmpPath = path.join(directory, `.mcsm_${crypto.randomUUID()}.part`);
       try {
         await fs.ensureDir(directory);
-        await fs.remove(tmpPath);
         try {
           // Same volume: a hard link is instant and costs no extra space.
           await fs.link(request.filePath, tmpPath);
@@ -116,14 +124,22 @@ export function createLocalDriver(destination: LocalDestination<string>): Destin
           );
         }
         throwIfAborted(request.signal);
-        await fs.rename(tmpPath, finalPath);
-        return { remoteId: name, sizeBytes: (await fs.stat(finalPath)).size };
+        const { size } = await fs.stat(tmpPath);
+        try {
+          // Publish without replacing an older backup with the same short suffix.
+          await fs.link(tmpPath, finalPath);
+        } catch (err: any) {
+          if (!["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS"].includes(err?.code)) throw err;
+          await fs.copyFile(tmpPath, finalPath, fs.constants.COPYFILE_EXCL);
+        }
+        return { remoteId: name, sizeBytes: size };
       } catch (err: any) {
-        await fs.remove(tmpPath).catch(() => undefined);
         if (request.signal?.aborted || err?.name === "AbortError") {
           throw new BackupDriverError(BackupDriverErrorCode.ABORTED, "Operation aborted");
         }
         throw mapFsError(err);
+      } finally {
+        await fs.remove(tmpPath).catch(() => undefined);
       }
     },
 

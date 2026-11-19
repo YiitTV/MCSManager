@@ -16,7 +16,13 @@ import { FakeGoogle } from "./gdrive_fake_server";
 const fake = new FakeGoogle();
 let tmp: string;
 const MIB = 1024 * 1024;
-const object = { instanceUuid: "inst1234", planId: "plan1", backupId: "bk1" };
+const object = {
+  instanceUuid: "inst1234",
+  planId: "plan1",
+  backupId: "2c2ff8a",
+  instanceName: " Çığ/Lobi.2 ",
+  createdAt: Date.UTC(2026, 10, 19, 16)
+};
 
 function destination(over: Partial<GDriveDestination["config"]> = {}): GDriveDestination<string> {
   return {
@@ -84,15 +90,18 @@ describe("gdrive driver put/head/get/remove", () => {
     expect(BACKUP_PART_SIZES.GDRIVE_CHUNK % (256 * 1024)).toBe(0);
     const stored = fake.files.get(res.remoteId)!;
     expect(stored.data.equals(f.buf)).toBe(true);
-    expect(stored.name).toBe("plan1_bk1.zip");
-    expect(stored.appProperties?.sha256).toBe(f.sha);
+    expect(stored.name).toBe("Çığ_Lobi.2_2026-11-19_16-00_2c2ff8.zip");
+    expect(stored.appProperties).toEqual({ sha256: f.sha, backupId: object.backupId });
     expect(res.sizeBytes).toBe(f.buf.length);
     expect(progress[progress.length - 1]).toBe(f.buf.length);
-    // folder chain MCSManager/<instanceUuid> under root
     const folders = [...fake.files.values()].filter((x) => x.mimeType);
-    expect(folders.map((x) => x.name).sort()).toEqual(["MCSManager", "inst1234"]);
-    expect(stored.parents).toEqual([folders.find((x) => x.name === "inst1234")!.id]);
-    expect(folders.find((x) => x.name === "MCSManager")!.parents).toEqual(["root"]);
+    const root = folders.find((x) => x.name === "MCSManager")!;
+    const instanceFolder = folders.find((x) => x.name === "Çığ_Lobi.2")!;
+    expect(folders).toHaveLength(2);
+    expect(stored.parents).toEqual([instanceFolder.id]);
+    expect(instanceFolder.parents).toEqual([root.id]);
+    expect(instanceFolder.appProperties).toEqual({ mcsmInstanceUuid: object.instanceUuid });
+    expect(root.parents).toEqual(["root"]);
   });
 
   it("reuses existing folders and honours the configured parent folder", async () => {
@@ -102,6 +111,37 @@ describe("gdrive driver put/head/get/remove", () => {
     const folders = [...fake.files.values()].filter((x) => x.mimeType);
     expect(folders).toHaveLength(2);
     expect(folders.find((x) => x.name === "MCSManager")!.parents).toEqual(["PARENT_1"]);
+  });
+
+  it("gives instances with the same nickname different folders even during concurrent uploads", async () => {
+    const f = makeFile(100);
+    const first = { ...object, instanceName: "Lobi" };
+    const second = { ...first, instanceUuid: "second12-extra" };
+    const [a, b] = await Promise.all([
+      driver().put(putReq(f, { object: first })),
+      driver().put(putReq(f, { object: second }))
+    ]);
+    const folderFor = (fileId: string) => fake.files.get(fake.files.get(fileId)!.parents[0]);
+    expect(folderFor(a.remoteId)).toMatchObject({
+      name: "Lobi",
+      appProperties: { mcsmInstanceUuid: first.instanceUuid }
+    });
+    expect(folderFor(b.remoteId)).toMatchObject({
+      name: "Lobi (second12)",
+      appProperties: { mcsmInstanceUuid: second.instanceUuid }
+    });
+    expect(folderFor(a.remoteId)!.parents).toEqual(folderFor(b.remoteId)!.parents);
+  });
+
+  it("reuses the folder by appProperty after an instance rename", async () => {
+    const f = makeFile(100);
+    const a = await driver().put(putReq(f));
+    const renamed = { ...object, instanceName: "New Name", backupId: "b22222" };
+    const b = await driver().put(putReq(f, { object: renamed }));
+    const stored = fake.files.get(b.remoteId)!;
+    expect(stored.name).toBe("New Name_2026-11-19_16-00_b22222.zip");
+    expect(stored.parents).toEqual(fake.files.get(a.remoteId)!.parents);
+    expect([...fake.files.values()].filter((file) => file.mimeType)).toHaveLength(2);
   });
 
   it("resumes at the right offset after a transient failure (chunk not stored)", async () => {
@@ -196,8 +236,12 @@ describe("gdrive driver put/head/get/remove", () => {
   it("remove is idempotent and only deletes the given id", async () => {
     const f = makeFile(100);
     const d = driver();
-    const a = await d.put(putReq(f));
+    const a = await d.put(putReq(f, { object: { ...object, createdAt: undefined } }));
     const b = await d.put({ ...putReq(f), object: { ...object, backupId: "bk2" } });
+    expect(fake.files.get(a.remoteId)!.name).toBe("plan1_2c2ff8a.zip");
+    const destPath = path.join(tmp, "legacy.zip");
+    await d.get({ remoteId: a.remoteId, destPath });
+    expect(fs.readFileSync(destPath)).toEqual(f.buf);
     fake.deleted = [];
     await d.remove(a.remoteId);
     await d.remove(a.remoteId);

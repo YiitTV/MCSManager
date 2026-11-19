@@ -22,7 +22,13 @@ beforeEach(async () => {
 });
 afterEach(() => fs.remove(base));
 
-const obj = { instanceUuid: "inst1", planId: "plan1", backupId: "bk1" };
+const obj = {
+  instanceUuid: "inst1",
+  planId: "plan1",
+  backupId: "2c2ff8a",
+  instanceName: " Çığ/Lobi.2 ",
+  createdAt: Date.UTC(2026, 10, 19, 16)
+};
 
 describe("local driver", () => {
   it("puts, heads, gets and removes by recorded id", async () => {
@@ -30,7 +36,7 @@ describe("local driver", () => {
     await fs.writeFile(src, "hello");
     const d = createLocalDriver(dest);
     const res = await d.put({ filePath: src, sizeBytes: 5, sha256: "x", object: obj });
-    expect(res).toEqual({ remoteId: "plan1_bk1.zip", sizeBytes: 5 });
+    expect(res).toEqual({ remoteId: "Çığ_Lobi.2_2026-11-19_16-00_2c2ff8.zip", sizeBytes: 5 });
     expect(await d.head(res.remoteId)).toEqual({ exists: true, sizeBytes: 5 });
     const out = path.join(base, "out.zip");
     await d.get({ remoteId: res.remoteId, destPath: out });
@@ -41,6 +47,32 @@ describe("local driver", () => {
     expect((await fs.readdir(dest.config.directory)).filter((n) => n.endsWith(".part"))).toEqual(
       []
     );
+  });
+
+  it("reads and removes a legacy backup by its recorded filename", async () => {
+    const remoteId = "plan1_bk1.zip";
+    await fs.outputFile(path.join(dest.config.directory, remoteId), "legacy");
+    const d = createLocalDriver(dest);
+    const out = path.join(base, "legacy.zip");
+    await d.get({ remoteId, destPath: out });
+    expect(await fs.readFile(out, "utf8")).toBe("legacy");
+    await d.remove(remoteId);
+    expect((await d.head(remoteId)).exists).toBe(false);
+  });
+
+  it("preserves the recorded copy if a six-character suffix collides", async () => {
+    const src = path.join(base, "original.zip");
+    const other = path.join(base, "other.zip");
+    await fs.writeFile(src, "hello");
+    await fs.writeFile(other, "later");
+    const d = createLocalDriver(dest);
+    const request = { filePath: src, sizeBytes: 5, sha256: "x", object: obj };
+    const { remoteId } = await d.put(request);
+    await expect(
+      d.put({ ...request, filePath: other, object: { ...obj, backupId: "2c2ff8b" } })
+    ).rejects.toMatchObject({ code: BackupDriverErrorCode.FAILED });
+    expect(await fs.readdir(dest.config.directory)).toEqual([remoteId]);
+    expect(await fs.readFile(path.join(dest.config.directory, remoteId), "utf8")).toBe("hello");
   });
 
   it("refuses ids that are not plain file names", async () => {
