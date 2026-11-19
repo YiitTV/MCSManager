@@ -423,6 +423,7 @@ describe("Docker instance lifecycle (real)", () => {
     expect(fs.existsSync(configPath)).toBe(true);
 
     const { socket } = invoke("instance/delete", { instanceUuids: [uuid], deleteFile: false });
+    await flush();
 
     const pkt = packetsFor(socket, "instance/delete")[0];
     expect(pkt.status).toBe(200);
@@ -707,12 +708,44 @@ describe("General process instance interactive lifecycle (real)", () => {
     expect(fs.existsSync(configPath)).toBe(true);
 
     const { socket } = invoke("instance/delete", { instanceUuids: [uuid], deleteFile: false });
+    await flush();
     const pkt = packetsFor(socket, "instance/delete")[0];
     expect(pkt.status).toBe(200);
     expect(pkt.data.instanceUuids).toEqual([uuid]);
     expect(InstanceSubsystem.exists(uuid)).toBe(false);
     expect(fs.existsSync(configPath)).toBe(false);
   }, 60000);
+
+  it("delete with files removes the persisted index and recorded archive", async () => {
+    const { uuid } = createInstance(processConfig("proc-delete-backups"));
+    const { default: storage } = await import("../../common/system_storage");
+    const { backupIndexStore } = await import("../../service/backup/stores");
+    const directory = path.join(await fs.realpath(tmpDir), "local-backup-destination");
+    const archive = path.join(directory, "plan_backup.zip");
+    const unrelated = path.join(directory, "unrelated.zip");
+    await fs.outputFile(archive, "recorded archive");
+    await fs.outputFile(unrelated, "unrelated");
+    storage.store("BackupIndex", "local_dirs", { dirs: { local: directory } });
+    await backupIndexStore.add(uuid, {
+      id: "backup",
+      planId: "plan",
+      createdAt: 0,
+      sizeBytes: 16,
+      sha256: "",
+      trigger: "manual",
+      warnings: [],
+      copies: { local: { status: "ok", type: "local", name: "Local", remoteId: "plan_backup.zip" } }
+    });
+
+    const { socket } = invoke("instance/delete", { instanceUuids: [uuid], deleteFile: true });
+    await waitFor(() => packetsFor(socket, "instance/delete").length > 0, 5000, "delete response");
+
+    expect(packetsFor(socket, "instance/delete")[0].status).toBe(200);
+    expect(InstanceSubsystem.exists(uuid)).toBe(false);
+    expect(backupIndexStore.listInstances()).not.toContain(uuid);
+    expect(await fs.pathExists(archive)).toBe(false);
+    expect(await fs.readFile(unrelated, "utf8")).toBe("unrelated");
+  });
 });
 
 describe("background mod installation", () => {

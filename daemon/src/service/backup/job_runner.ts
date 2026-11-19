@@ -40,12 +40,12 @@ import {
   StatfsFn
 } from "./disk_check";
 import { abortError, BackupError, throwIfAborted, toBackupFailure } from "./errors";
-import { BackupIndexStore } from "./index_store";
+import { BackupIndexStore, StoredBackupCopy, StoredBackupRecord } from "./index_store";
 import { HookInstance, withMinecraftSaveHook } from "./minecraft_hook";
 import { BackupQueue, JobContext } from "./queue";
 import { restoreArchive } from "./restore";
 import { applyRetention } from "./retention";
-import { resolveLocalCopyPath } from "./destinations/local";
+import { removeRecordedLocalCopy, resolveLocalCopyPath } from "./destinations/local";
 import { assertLocalDirectoryAllowed } from "./local_dir_policy";
 
 /** Extra broadcast (daemon only) with the outcome of a restore job. */
@@ -179,6 +179,13 @@ interface JobMeta {
   instanceName?: string;
 }
 
+function publicRecord(record: StoredBackupRecord): BackupRecord {
+  const copies = Object.fromEntries(
+    Object.entries(record.copies).map(([id, { localDirectory: _directory, ...copy }]) => [id, copy])
+  );
+  return { ...record, copies };
+}
+
 export class BackupJobRunner {
   private readonly now: () => number;
   private readonly newId: () => string;
@@ -203,7 +210,36 @@ export class BackupJobRunner {
   }
 
   records(instanceUuid: string): BackupRecord[] {
-    return this.deps.store.list(instanceUuid);
+    return this.deps.store.list(instanceUuid).map(publicRecord);
+  }
+
+  /** The instance subsystem blocks new work for this instance while cleanup runs. */
+  async removeInstanceBackups(instanceUuid: string, deleteFile: boolean): Promise<void> {
+    const { queue, store } = this.deps;
+    await queue.cancelInstance(instanceUuid);
+
+    const records = store.list(instanceUuid);
+    const copies = records.flatMap((record) =>
+      Object.entries(record.copies).filter(([, copy]) => copy.status === "ok")
+    );
+    const remoteCount = copies.filter(
+      ([, copy]) => copy.type === "s3" || copy.type === "gdrive"
+    ).length;
+    logger.info(`Instance ${instanceUuid}: leaving ${remoteCount} remote backup copies in place`);
+
+    // Keeping instance files also keeps the local archives and their index.
+    if (!deleteFile) return;
+
+    const legacyDirs = store.getLocalDirs();
+    for (const [destinationId, copy] of copies) {
+      if (copy.type !== "local") continue;
+      const directory = copy.localDirectory ?? legacyDirs[destinationId];
+      if (!copy.remoteId || !directory || !path.isAbsolute(directory)) {
+        throw new Error("Local backup copy is missing its recorded directory or file name");
+      }
+      await removeRecordedLocalCopy(directory, copy.remoteId);
+    }
+    await store.deleteInstance(instanceUuid);
   }
 
   async pendingEvents(): Promise<BackupFinishedPayload[]> {
@@ -340,6 +376,10 @@ export class BackupJobRunner {
   async recover(): Promise<void> {
     await this.cleanStaging(0);
     for (const job of this.deps.store.listInflight()) {
+      if (!this.deps.getInstance(job.instanceUuid)) {
+        await this.deps.store.clearInflight(job.backupId);
+        continue;
+      }
       const now = this.now();
       const copies: Record<string, BackupCopyResult> = {};
       for (const d of job.destinations) {
@@ -508,13 +548,13 @@ export class BackupJobRunner {
     const startedAt = this.now();
     const secrets = secretsOf(destinations);
     const warnings: string[] = [];
-    const copies: Record<string, BackupCopyResult> = {};
+    const copies: Record<string, StoredBackupCopy> = {};
     const drivers = new Map<string, DestinationDriver>();
     const staging = this.stagingPath(meta.backupId);
     const restorePriority = (this.deps.lowerPriority ?? lowerPriority)();
     let size = 0;
     let sha256 = "";
-    let record: BackupRecord | undefined;
+    let record: StoredBackupRecord | undefined;
     let failure: { code: BackupErrorCode; text: string } | undefined;
     let finished = false;
 
@@ -603,7 +643,17 @@ export class BackupJobRunner {
         ctx.setDestination(dest.id);
         ctx.setProgress(0, size);
         try {
-          const driver = this.deps.driverFactory(dest);
+          const target =
+            dest.type === "local"
+              ? {
+                  ...dest,
+                  config: {
+                    ...dest.config,
+                    directory: assertLocalDirectoryAllowed(dest.config.directory, this.deps)
+                  }
+                }
+              : dest;
+          const driver = this.deps.driverFactory(target);
           drivers.set(dest.id, driver);
           const remoteId = await this.putWithRetry(
             driver,
@@ -612,7 +662,13 @@ export class BackupJobRunner {
             { path: staging, sizeBytes: size, sha256 },
             ctx
           );
-          copies[dest.id] = { status: "ok", type: dest.type, name: dest.name, remoteId };
+          copies[dest.id] = {
+            status: "ok",
+            type: dest.type,
+            name: dest.name,
+            remoteId,
+            localDirectory: target.type === "local" ? target.config.directory : undefined
+          };
         } catch (err) {
           if (ctx.signal.aborted) throw abortError(ctx.signal);
           copies[dest.id] = {
@@ -672,7 +728,8 @@ export class BackupJobRunner {
             plan,
             newRecord: record,
             getDriver: (id) => drivers.get(id),
-            secretValues: secrets
+            secretValues: secrets,
+            call: { signal: ctx.signal }
           });
           if (extra.length > 0) {
             record.warnings = [...record.warnings, ...extra].slice(0, BACKUP_LIMITS.MAX_WARNINGS);
@@ -725,7 +782,7 @@ export class BackupJobRunner {
         this.emitFinished({
           instanceUuid,
           planId: plan.id,
-          record,
+          record: publicRecord(record),
           errorSummary: failure?.text,
           errorCode: failure?.code,
           durationMs: Math.max(0, this.now() - startedAt),

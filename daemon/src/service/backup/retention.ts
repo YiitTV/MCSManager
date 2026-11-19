@@ -6,6 +6,7 @@ import {
   sanitizeBackupError
 } from "mcsmanager-common";
 import { BackupIndexStore } from "./index_store";
+import { removeRecordedLocalCopy } from "./destinations/local";
 
 export interface RetentionDeletion {
   recordId: string;
@@ -61,14 +62,21 @@ export interface ApplyRetentionOptions {
 export async function applyRetention(opts: ApplyRetentionOptions): Promise<string[]> {
   const { store, instanceUuid, plan, newRecord } = opts;
   const warnings: string[] = [];
-  const deletions = selectRetentionDeletions(store.list(instanceUuid), plan, newRecord);
+  const records = store.list(instanceUuid);
+  const byId = new Map(records.map((record) => [record.id, record]));
+  const deletions = selectRetentionDeletions(records, plan, newRecord);
   const deleted: RetentionDeletion[] = [];
   for (const d of deletions) {
     if (opts.call?.signal?.aborted) break;
     const driver = opts.getDriver(d.destinationId);
     if (!driver) continue;
     try {
-      await driver.remove(d.remoteId, opts.call);
+      const copy = byId.get(d.recordId)?.copies[d.destinationId];
+      if (copy?.type === "local" && copy.localDirectory) {
+        await removeRecordedLocalCopy(copy.localDirectory, d.remoteId);
+      } else {
+        await driver.remove(d.remoteId, opts.call);
+      }
       deleted.push(d);
     } catch (err) {
       const name = newRecord.copies[d.destinationId]?.name ?? d.destinationId;

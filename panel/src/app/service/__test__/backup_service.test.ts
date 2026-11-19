@@ -20,6 +20,7 @@ import {
   createPlan,
   deleteDestination,
   deletePlan,
+  deletePlansForInstances,
   listPlansForInstance,
   listPublicDestinations,
   getStoredDestination,
@@ -78,6 +79,27 @@ async function code(p: Promise<unknown>) {
   }
   return "no error";
 }
+
+describe("instance backup plan cleanup", () => {
+  it("removes plans for the deleted instances on the matching daemon only", async () => {
+    fakeDaemon.knownDaemons.add("d2");
+    const first = await createPlan(planBody());
+    const second = await createPlan(planBody({ uuid: "inst2" }));
+    await createPlan(planBody({ name: "Second plan" }));
+    const otherInstance = await createPlan(planBody({ uuid: "inst3" }));
+    const otherDaemon = await createPlan(planBody({ daemonId: "d2" }));
+    fakeDaemon.reset();
+
+    await deletePlansForInstances("d1", [first.instanceUuid, second.instanceUuid]);
+    await deletePlansForInstances("d1", [first.instanceUuid]);
+
+    expect(await listPlansForInstance("d1", first.instanceUuid)).toEqual([]);
+    expect(await listPlansForInstance("d1", second.instanceUuid)).toEqual([]);
+    expect(await listPlansForInstance("d1", otherInstance.instanceUuid)).toEqual([otherInstance]);
+    expect(await listPlansForInstance("d2", otherDaemon.instanceUuid)).toEqual([otherDaemon]);
+    expect(fakeDaemon.callsOf("schedule/delete")).toEqual([]);
+  });
+});
 
 describe("destinations", () => {
   it("creates a default local destination and lists it masked", async () => {

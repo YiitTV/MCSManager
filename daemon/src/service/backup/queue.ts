@@ -33,6 +33,7 @@ interface Entry {
   status: BackupJobStatus;
   controller: AbortController;
   timer?: ReturnType<typeof setTimeout>;
+  finished?: Promise<void>;
 }
 
 export interface QueueOptions {
@@ -86,19 +87,46 @@ export class BackupQueue {
     );
     if (idx >= 0) {
       const [entry] = this.waiting.splice(idx, 1);
-      const err = new BackupError(BackupErrorCode.CANCELLED, "Backup cancelled");
-      void Promise.resolve(entry.spec.onDropped?.(err)).catch(() => undefined);
+      void this.drop(entry);
       return true;
     }
     const cur = this.current;
     if (cur && cur.spec.backupId === backupId && cur.spec.instanceUuid === instanceUuid) {
-      if (cur.status.state !== "cancelling") {
-        cur.status.state = "cancelling";
-        cur.controller.abort(new BackupError(BackupErrorCode.CANCELLED, "Backup cancelled"));
-      }
+      this.abort(cur);
       return true;
     }
     return false;
+  }
+
+  /** Cancel only this instance's jobs and wait for their final writes and rollback. */
+  async cancelInstance(instanceUuid: string): Promise<void> {
+    const dropped: Promise<void>[] = [];
+    for (let i = this.waiting.length - 1; i >= 0; i--) {
+      if (this.waiting[i].spec.instanceUuid === instanceUuid) {
+        const [entry] = this.waiting.splice(i, 1);
+        dropped.push(this.drop(entry));
+      }
+    }
+    const current = this.current;
+    if (current?.spec.instanceUuid === instanceUuid) {
+      this.abort(current);
+      await current.finished;
+    }
+    await Promise.all(dropped);
+  }
+
+  private async drop(entry: Entry): Promise<void> {
+    try {
+      await entry.spec.onDropped?.(new BackupError(BackupErrorCode.CANCELLED, "Backup cancelled"));
+    } catch {
+      // Dropped-job reporting is best effort.
+    }
+  }
+
+  private abort(entry: Entry) {
+    if (entry.status.state === "cancelling") return;
+    entry.status.state = "cancelling";
+    entry.controller.abort(new BackupError(BackupErrorCode.CANCELLED, "Backup cancelled"));
   }
 
   status(instanceUuid?: string): { running?: BackupJobStatus; queued: BackupJobStatus[] } {
@@ -150,7 +178,7 @@ export class BackupQueue {
         entry.status.destinationId = id;
       }
     };
-    entry.spec
+    entry.finished = entry.spec
       .run(ctx)
       .catch(() => undefined)
       .finally(() => {

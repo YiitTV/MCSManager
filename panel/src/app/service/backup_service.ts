@@ -414,6 +414,18 @@ export async function listPlansForInstance(daemonId: string, instanceUuid: strin
   return all.filter((p) => p.daemonId === daemonId && p.instanceUuid === instanceUuid);
 }
 
+/** Remove plans after the daemon confirms deletion and has removed the instance schedules. */
+export async function deletePlansForInstances(daemonId: string, instanceUuids: string[]) {
+  const ids = new Set(instanceUuids);
+  await execWithMutexId(CONFIG_MUTEX, async () => {
+    for (const plan of await listDocs<BackupPlan>(BACKUP_PLAN_CATEGORY)) {
+      if (plan.daemonId === daemonId && ids.has(plan.instanceUuid)) {
+        await Storage.getStorage().delete(BACKUP_PLAN_CATEGORY, plan.id);
+      }
+    }
+  });
+}
+
 /** Plan view with destination name/type refs (what every role may see). */
 export async function describePlans(plans: BackupPlan[]) {
   const dests = await listStoredDestinations();

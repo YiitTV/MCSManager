@@ -16,6 +16,7 @@ import {
   LocalDestination,
   sanitizeBackupError
 } from "mcsmanager-common";
+import { resolvePhysicalPath } from "../../../tools/path_link_check";
 import { defaultStatfs, freeBytes } from "../disk_check";
 
 /** remoteId of a local copy: a flat file name `<planId>_<backupId>.zip`. */
@@ -57,6 +58,26 @@ export function resolveLocalCopyPath(directory: string, remoteId: string): strin
     fail(BackupDriverErrorCode.FAILED, "Invalid local backup id");
   }
   return path.join(path.resolve(directory), remoteId);
+}
+
+/** Remove a single recorded archive. A missing archive is already removed. */
+async function removeLocalCopy(directory: string, remoteId: string): Promise<void> {
+  const filePath = resolveLocalCopyPath(directory, remoteId);
+  try {
+    await fs.unlink(filePath);
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return;
+    throw mapFsError(err);
+  }
+}
+
+/** Reject a recorded directory that now redirects to another location. */
+export async function removeRecordedLocalCopy(directory: string, remoteId: string): Promise<void> {
+  const resolved = resolvePhysicalPath(directory);
+  if (!resolved || path.relative(directory, resolved) !== "") {
+    fail(BackupDriverErrorCode.FAILED, "Local backup directory resolves outside its recorded path");
+  }
+  await removeLocalCopy(directory, remoteId);
 }
 
 export function createLocalDriver(destination: LocalDestination<string>): DestinationDriver {
@@ -158,13 +179,7 @@ export function createLocalDriver(destination: LocalDestination<string>): Destin
     },
 
     async remove(remoteId: string): Promise<void> {
-      const p = resolveLocalCopyPath(directory, remoteId);
-      try {
-        await fs.unlink(p);
-      } catch (err: any) {
-        if (err?.code === "ENOENT") return;
-        throw mapFsError(err);
-      }
+      await removeLocalCopy(directory, remoteId);
     }
   };
 }

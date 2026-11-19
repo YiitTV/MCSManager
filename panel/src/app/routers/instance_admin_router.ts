@@ -8,6 +8,7 @@ import { ROLE } from "../entity/user";
 import { $t } from "../i18n";
 import permission from "../middleware/permission";
 import validator from "../middleware/validator";
+import { deletePlansForInstances } from "../service/backup_service";
 import { updateInstanceWithAudit } from "../service/instance_config_audit";
 import { multiOperationForwarding } from "../service/instance_service";
 import { logger } from "../service/log";
@@ -23,6 +24,8 @@ import GatewayToken from "../service/gateway_token";
 import { browserFacingAddr } from "../service/proxy_addr";
 
 const router = new Router({ prefix: "/instance" });
+// Backup cancellation may wait for a destination request or restore rollback.
+const INSTANCE_DELETE_TIMEOUT = 5 * 60_000;
 
 // [Low-level Permission]
 // Get the details of an instance
@@ -174,16 +177,15 @@ router.delete(
       const remoteService = RemoteServiceSubsystem.getInstance(daemonId);
       if (!instanceUuids || !Array.isArray(instanceUuids))
         throw new Error("Type error, invalid uuids or daemonId");
-      const result = await new RemoteRequest(remoteService).request("instance/delete", {
-        instanceUuids,
-        deleteFile
-      });
-      const instanceIds = result.instances.map((instance: { instanceUuid: string }) => ({
+      const result = await new RemoteRequest(remoteService).request<{
+        instances: { instanceUuid: string; nickname: string }[];
+      }>("instance/delete", { instanceUuids, deleteFile }, INSTANCE_DELETE_TIMEOUT);
+      const instanceIds = result.instances.map((instance) => ({
         instanceUuid: instance.instanceUuid,
         daemonId
       }));
       userSystem.deleteUserInstances(null, instanceIds, true);
-      result.instances.forEach((e: { instanceUuid: string; nickname: string }) => {
+      result.instances.forEach((e) => {
         operationLogger.log(
           "instance_delete",
           {
@@ -195,6 +197,10 @@ router.delete(
           "error"
         );
       });
+      await deletePlansForInstances(
+        daemonId,
+        instanceIds.map((instance) => instance.instanceUuid)
+      );
       ctx.body = result;
     } catch (err) {
       ctx.body = err;
