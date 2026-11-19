@@ -1,5 +1,6 @@
-import { Socket } from "socket.io";
+import type { Socket } from "socket.io";
 import RouterContext from "../entity/ctx";
+import logger from "./log";
 import { msg } from "./protocol";
 
 /**
@@ -9,30 +10,30 @@ import { msg } from "./protocol";
  */
 const authenticated = new Set<Socket>();
 
-export function addAuthenticatedSocket(socket: Socket) {
+export function register(socket: Socket) {
+  if (authenticated.has(socket)) return;
   authenticated.add(socket);
   socket.once("disconnect", () => authenticated.delete(socket));
 }
 
-export function removeAuthenticatedSocket(socket: Socket) {
-  authenticated.delete(socket);
+export function hasAuthenticatedPanel(): boolean {
+  for (const socket of authenticated) {
+    if (!socket.connected) authenticated.delete(socket);
+  }
+  return authenticated.size > 0;
 }
 
-export function authenticatedSocketCount(): number {
-  for (const s of authenticated) if (s.disconnected) authenticated.delete(s);
-  return authenticated.size;
-}
-
-/** Send an event to every authenticated panel socket. Returns how many sockets were targeted. */
-export function broadcastToAuthenticated(event: string, payload: unknown): number {
-  let n = 0;
+/** Send an event to every connected, authenticated panel socket. */
+export function broadcast(event: string, data: unknown): void {
   for (const socket of [...authenticated]) {
-    if (socket.disconnected) {
+    if (!socket.connected) {
       authenticated.delete(socket);
       continue;
     }
-    msg(new RouterContext(null, socket), event, payload);
-    n++;
+    try {
+      msg(new RouterContext(null, socket), event, data);
+    } catch (err) {
+      logger.debug(`Authenticated panel emit failed for ${event}`, err);
+    }
   }
-  return n;
 }

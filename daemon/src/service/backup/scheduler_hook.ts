@@ -7,8 +7,8 @@ import {
   BackupTriggerPayload,
   isValidBackupId
 } from "mcsmanager-common";
+import { broadcast, hasAuthenticatedPanel } from "../authenticated_sockets";
 import logger from "../log";
-import { authenticatedSocketCount, broadcastToAuthenticated } from "../authenticated_sockets";
 import { BackupIndexStore } from "./index_store";
 import { backupIndexStore } from "./stores";
 
@@ -21,8 +21,8 @@ export interface ScheduleHookDeps {
 
 const defaultDeps = (): ScheduleHookDeps => ({
   store: backupIndexStore,
-  hasPanel: () => authenticatedSocketCount() > 0,
-  broadcast: broadcastToAuthenticated,
+  hasPanel: hasAuthenticatedPanel,
+  broadcast,
   now: Date.now
 });
 

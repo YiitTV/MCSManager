@@ -5,7 +5,8 @@ vi.mock("../../../common/system_storage", () => ({
   default: { store: vi.fn(), list: vi.fn(() => []), load: vi.fn() }
 }));
 
-import { registerPanelSocket, setDaemonShuttingDown } from "../../../service/panel_notifier";
+import { register } from "../../../service/authenticated_sockets";
+import { setDaemonShuttingDown } from "../../../service/panel_notifier";
 import Instance from "../instance";
 import InstanceConfig from "../Instance_config";
 
@@ -38,7 +39,7 @@ beforeEach(() => {
   const orig = socket.emit.bind(socket);
   socket.emit = (e: string, ...a: any[]) =>
     e === "disconnect" ? orig(e, ...a) : sent.push([e, ...a]);
-  registerPanelSocket(socket);
+  register(socket);
 });
 
 afterEach(() => {
