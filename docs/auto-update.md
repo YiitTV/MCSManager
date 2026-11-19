@@ -56,6 +56,43 @@ reminder — nothing restarts by itself.
 > pipeline and must be refreshed when a release ships, otherwise a fallback
 > check reports "already latest" against the older mirrored versions.
 
+### Fork installs (Minefield)
+
+To disable official update checks, clear both `updateSourceUrl` and
+`updateSourceUrlFallback` in the panel's **Settings → Auto Update** tab and
+set both fields to empty strings in the daemon's `data/Config/global.json`.
+The daemon reads its configuration at startup.
+
+Minefield adds a fourth numeric version segment, such as `10.22.1.1` for the
+panel and `4.19.3.1` for the daemon. Increment that segment for each fork
+release based on the same upstream version.
+
+Run the Minefield updater as root on the install host. `web` updates the
+panel and is the default, `daemon` updates the daemon, and `all` updates
+both. [Updater script](../scripts/minefield-update.sh)
+
+```bash
+bash minefield-update.sh web
+bash minefield-update.sh daemon
+bash minefield-update.sh all
+bash minefield-update.sh rollback <dir>
+```
+
+Both `daemon` and `all` restart the daemon, which stops running game servers.
+Stop the instances gracefully before updating or rolling back the daemon.
+The script saves code backups in `/opt/mcsm-backup/<timestamp>`. Pass that
+directory as `<dir>` to roll back. Updates and rollbacks leave `data/` untouched.
+
+To enable UI updates from the fork later, generate the release manifest with
+the `--repo` flag so the package URLs point to the fork.
+
+```bash
+node scripts/build-release-update-packages.mjs --tag <tag> --repo <fork-owner>/<fork-repo>
+```
+
+Set `updateSourceUrl` to the fork's published manifest URL and leave
+`updateSourceUrlFallback` empty.
+
 ## 2. Architecture / data flow
 
 ```

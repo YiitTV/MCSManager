@@ -139,6 +139,12 @@ describe("compareVersions", () => {
     expect(compareVersions(undefined, "0")).toBe(0);
   });
 
+  it("sorts a four-segment fork version between its base and the next patch", () => {
+    expect(compareVersions("10.22.1.1", "10.22.1")).toBe(1);
+    expect(compareVersions("10.22.1.1", "10.22.2")).toBe(-1);
+    expect(compareVersions("10.22.1.1", "10.22.1.1")).toBe(0);
+  });
+
   it("treats non-numeric segments as 0", () => {
     expect(compareVersions("1.x.3", "1.0.3")).toBe(0);
   });
@@ -167,6 +173,7 @@ describe("normalizeVersion", () => {
 describe("isComparableVersion", () => {
   it("accepts dotted-numeric versions with an optional v prefix", () => {
     expect(isComparableVersion("10.21.2")).toBe(true);
+    expect(isComparableVersion("10.22.1.1")).toBe(true);
     expect(isComparableVersion("v10.21.2")).toBe(true);
     expect(isComparableVersion("4")).toBe(true);
     expect(isComparableVersion("  4.19.2  ")).toBe(true);
@@ -178,6 +185,7 @@ describe("isComparableVersion", () => {
     expect(isComparableVersion(undefined)).toBe(false);
     expect(isComparableVersion("abc")).toBe(false);
     expect(isComparableVersion("1.2.3-beta")).toBe(false);
+    expect(isComparableVersion("10.22.1-minefield.1")).toBe(false);
     expect(isComparableVersion("1..2")).toBe(false);
     expect(isComparableVersion("1.2.")).toBe(false);
     expect(isComparableVersion("10.21.2.")).toBe(false);

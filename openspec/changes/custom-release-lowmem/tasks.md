@@ -2,9 +2,9 @@
 
 ## 1. Fork version marker (code)
 
-- [ ] 1.1 Add cases to `common/src/__test__/upgrade.test.ts`: `compareVersions("10.22.1.1","10.22.1")` is 1, `("10.22.1.1","10.22.2")` is -1, `("10.22.1.1","10.22.1.1")` is 0; `isComparableVersion("10.22.1.1")` is true; `isComparableVersion("10.22.1-minefield.1")` is false. Verify: `cd common && npm test`.
-- [ ] 1.2 Add a case to the frontend version test (the existing test for `frontend/src/tools/version.ts`, or a new `frontend/src/tools/__test__/version.test.ts`) asserting `hasVersionUpdate("4.19.3.1","4.19.3")` and `hasVersionUpdate("10.22.1.1","10.22.1")` are false. Verify: `cd frontend && npm run type-check && npm run lint && npm test`.
-- [ ] 1.3 Set `version` to `10.22.1.1` and `daemonVersion` to `4.19.3.1` in `panel/package.json` and `version` to `4.19.3.1` in `daemon/package.json` (and the matching root entries in each `package-lock.json`). Grep `panel/src`, `daemon/src`, `scripts/` and `frontend/src` for hard-coded `10.22.1` / `4.19.3` expectations and update any test fixtures that assert the real package version. Verify: `cd panel && npm test && npm run build`, `cd daemon && npm test && npm run build`. If any consumer rejects a four-segment version, revert this task and record it in the design (the marker is optional).
+- [x] 1.1 Add cases to `common/src/__test__/upgrade.test.ts`: `compareVersions("10.22.1.1","10.22.1")` is 1, `("10.22.1.1","10.22.2")` is -1, `("10.22.1.1","10.22.1.1")` is 0; `isComparableVersion("10.22.1.1")` is true; `isComparableVersion("10.22.1-minefield.1")` is false. Verify: `cd common && npm test`.
+- [x] 1.2 Add a case to the frontend version test (the existing test for `frontend/src/tools/version.ts`, or a new `frontend/src/tools/__test__/version.test.ts`) asserting `hasVersionUpdate("4.19.3.1","4.19.3")` and `hasVersionUpdate("10.22.1.1","10.22.1")` are false. Verify: `cd frontend && npm run type-check && npm run lint && npm test`.
+- [x] 1.3 Set `version` to `10.22.1.1` and `daemonVersion` to `4.19.3.1` in `panel/package.json` and `version` to `4.19.3.1` in `daemon/package.json` (and the matching root entries in each `package-lock.json`). Grep `panel/src`, `daemon/src`, `scripts/` and `frontend/src` for hard-coded `10.22.1` / `4.19.3` expectations and update any test fixtures that assert the real package version. Verify: `cd panel && npm test && npm run build`, `cd daemon && npm test && npm run build`. If any consumer rejects a four-segment version, revert this task and record it in the design (the marker is optional).
 
 ## 2. Release build and packaging (build host)
 
@@ -16,7 +16,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Add a short "Fork installs" section to `docs/auto-update.md`: disabling by clearing both source fields (panel and daemon), the four-segment version convention, the `--repo` flag, and pointing the source at a fork manifest with an empty backup. Docs-only; verify by reading the rendered Markdown and checking the stated field names against `panel/src/app/entity/setting.ts` and `daemon/src/entity/config.ts`.
+- [x] 3.1 Add a short "Fork installs" section to `docs/auto-update.md`: disabling by clearing both source fields (panel and daemon), the four-segment version convention, the `--repo` flag, and pointing the source at a fork manifest with an empty backup. Docs-only; verify by reading the rendered Markdown and checking the stated field names against `panel/src/app/entity/setting.ts` and `daemon/src/entity/config.ts`.
 
 ## 4. Operator runbook (run on server)
 
