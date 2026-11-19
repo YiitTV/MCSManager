@@ -7,8 +7,8 @@ import {
   resolveInstanceFileOwnership,
   syncPathOwnershipWithinRoot
 } from "../../tools/file_ownership";
+import { broadcast, hasAuthenticatedPanel } from "../authenticated_sockets";
 import logger from "../log";
-import { authenticatedSocketCount, broadcastToAuthenticated } from "../authenticated_sockets";
 import InstanceSubsystem from "../system_instance";
 import { createDestinationDriver } from "./driver_factory";
 import { BackupJobRunner, RunnerInstance } from "./job_runner";
@@ -67,8 +67,8 @@ export function getBackupRunner(): BackupJobRunner {
       queue: new BackupQueue(),
       driverFactory: createDestinationDriver,
       stagingDir: path.join(StorageSubsystem.DATA_PATH, "BackupStaging"),
-      broadcast: (event, payload) => void broadcastToAuthenticated(event, payload),
-      hasPanel: () => authenticatedSocketCount() > 0,
+      broadcast,
+      hasPanel: hasAuthenticatedPanel,
       instanceDirs: () =>
         InstanceSubsystem.getInstances()
           .filter((i) => i.config?.cwd)
