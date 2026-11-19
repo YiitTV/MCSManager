@@ -5,6 +5,7 @@ import RemoteRequest from "../service/remote_command";
 import { InstanceStreamListener, removeTrail } from "mcsmanager-common";
 import { systemConfig } from "../setting";
 import { $t, i18next } from "../i18n";
+import { onDaemonLifecycle } from "../service/notification_service";
 
 export default class RemoteService {
   public static readonly STATUS_OK = 200;
@@ -68,6 +69,12 @@ export default class RemoteService {
     });
     this.socket.on("connect_error", async (error: Error) => {
       await this.onDisconnect();
+    });
+    // Instance lifecycle pushed by the daemon (notifications). Registered together with the other
+    // built-in listeners, so it exists exactly once per socket and is removed by disconnect().
+    this.socket.on("instance/lifecycle", (packet: any) => {
+      if (!packet || packet.uuid !== null || packet.status !== RemoteService.STATUS_OK) return;
+      onDaemonLifecycle(this.uuid, this.config.remarks, packet.data);
     });
   }
 
