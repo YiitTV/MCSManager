@@ -75,7 +75,7 @@ export default class StorageSubsystem {
   }
 
   /**
-   * Instantiate an object based on the class definition and identifier
+   * Hydrate a class by identifier, or pass null to load JSON with dynamic keys as stored.
    */
   public load(category: string, classz: any, uuid: string) {
     const dirPath = path.join(StorageSubsystem.DATA_PATH, category);
@@ -95,6 +95,7 @@ export default class StorageSubsystem {
       );
       return null;
     }
+    if (classz === null) return dataObject;
     const target = new classz();
     // deep object copy
     return this.defineAttr(target, dataObject);

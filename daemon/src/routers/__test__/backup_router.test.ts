@@ -1,6 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BackupErrorCode } from "mcsmanager-common";
-import { dispatch, flush, packetsFor } from "../../../test/harness/router";
+import fs from "fs-extra";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BackupErrorCode, LocalDestination } from "mcsmanager-common";
+import { dispatch, packetsFor } from "../../../test/harness/router";
+import { MemoryBackupStorage } from "../../service/backup/__test__/helpers";
+import { backupDownloadTickets } from "../../service/backup/download_tickets";
+import { BackupIndexStore } from "../../service/backup/index_store";
+import { BackupJobRunner } from "../../service/backup/job_runner";
+import { BackupQueue } from "../../service/backup/queue";
 
 const runner = vi.hoisted(() => ({
   enqueueBackup: vi.fn(() => ({ backupId: "b1" })),
@@ -9,11 +17,10 @@ const runner = vi.hoisted(() => ({
   cancel: vi.fn(() => true),
   records: vi.fn(() => []),
   pendingEvents: vi.fn(async () => []),
-  resolveLocalCopy: vi.fn(async () => ({
-    filePath: "/x/p_b.zip",
-    fileName: "p_b.zip",
-    sizeBytes: 3
-  })),
+  resolveLocalCopy: vi.fn<
+    Parameters<BackupJobRunner["resolveLocalCopy"]>,
+    ReturnType<BackupJobRunner["resolveLocalCopy"]>
+  >(),
   testDestination: vi.fn(async () => ({ ok: true }))
 }));
 
@@ -35,9 +42,13 @@ function call(event: string, data: any) {
 }
 async function result(event: string, data: any) {
   const socket = call(event, data);
-  await flush();
-  await flush();
-  return packetsFor(socket, event)[0];
+  const packet = packetsFor(socket, event)[0];
+  if (packet) return packet;
+  return new Promise<any>((resolve) => {
+    socket.emit.mockImplementation((name, response) => {
+      if (name === event) resolve(response);
+    });
+  });
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -97,15 +108,82 @@ describe("backup router", () => {
     });
     expect((await result("backup/pending_events", {})).data).toEqual({ events: [] });
   });
+});
 
-  it("issues a single-use 60 s ticket for the local copy", async () => {
-    const p = await result("backup/download_ticket", { instanceUuid: "inst1", recordId: "r" });
+describe("backup download tickets", () => {
+  const instanceUuid = "inst1";
+  const recordId = "r";
+  const fileName = "p_b.zip";
+  let directory: string;
+  let destinations: LocalDestination[];
+
+  beforeEach(async () => {
+    directory = await fs.mkdtemp(path.join(os.tmpdir(), "bk-ticket-"));
+    destinations = [
+      {
+        id: "local",
+        type: "local",
+        name: "Local",
+        config: { directory, maxTotalBytes: 1024 },
+        secrets: {},
+        createdAt: 0,
+        updatedAt: 0
+      }
+    ];
+    const store = new BackupIndexStore(new MemoryBackupStorage());
+    await store.add(instanceUuid, {
+      id: recordId,
+      planId: "p",
+      createdAt: 0,
+      sizeBytes: 3,
+      sha256: "a".repeat(64),
+      trigger: "manual",
+      warnings: [],
+      copies: { local: { status: "ok", type: "local", name: "Local", remoteId: fileName } }
+    });
+    const localRunner = new BackupJobRunner({
+      store,
+      queue: new BackupQueue(),
+      getInstance: () => undefined,
+      driverFactory: () => {
+        throw new Error("Download tickets do not need a destination driver");
+      },
+      stagingDir: path.join(directory, "staging"),
+      broadcast: () => undefined,
+      hasPanel: () => true,
+      maxUncompressedBytes: () => 1024
+    });
+    runner.resolveLocalCopy.mockImplementation(localRunner.resolveLocalCopy.bind(localRunner));
+  });
+
+  afterEach(async () => {
+    runner.resolveLocalCopy.mockReset();
+    await fs.remove(directory);
+  });
+
+  it("issues a single-use 60 s ticket using the supplied local destination", async () => {
+    const filePath = path.join(directory, fileName);
+    await fs.writeFile(filePath, "zip");
+    const withoutDestination = await result("backup/download_ticket", { instanceUuid, recordId });
+    expect(withoutDestination.data).toBe("BACKUP_RECORD_NOT_FOUND: No local copy available");
+    const p = await result("backup/download_ticket", { instanceUuid, recordId, destinations });
     expect(p.status).toBe(200);
     expect(p.data.ticket).toMatch(/^[0-9a-f]{48}$/);
-    expect(p.data.fileName).toBe("p_b.zip");
+    expect(p.data).toMatchObject({ fileName, sizeBytes: 3 });
     expect(p.data.expiresAt - Date.now()).toBeLessThanOrEqual(60_000);
-    const { backupDownloadTickets } = await import("../../service/backup/download_tickets");
-    expect(backupDownloadTickets.lookup(p.data.ticket, "inst1")).toMatchObject({ state: "valid" });
+    expect(backupDownloadTickets.lookup(p.data.ticket, instanceUuid)).toEqual({
+      state: "valid",
+      filePath,
+      fileName
+    });
     expect(backupDownloadTickets.lookup(p.data.ticket, "other").state).toBe("none");
+    backupDownloadTickets.consume(p.data.ticket);
+    expect(backupDownloadTickets.lookup(p.data.ticket, instanceUuid).state).toBe("none");
+  });
+
+  it("returns record-not-found when the recorded archive is missing", async () => {
+    const packet = await result("backup/download_ticket", { instanceUuid, recordId, destinations });
+    expect(packet.status).toBe(500);
+    expect(packet.data).toBe("BACKUP_RECORD_NOT_FOUND: No local copy available");
   });
 });

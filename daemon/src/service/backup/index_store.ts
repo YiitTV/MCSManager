@@ -31,9 +31,6 @@ class InflightFile {
 class PendingFile {
   events: BackupFinishedPayload[] = [];
 }
-class LocalDirsFile {
-  dirs: Record<string, string> = {};
-}
 
 /** Job that was running; persisted by id only (no secrets) for restart recovery. */
 export interface InflightJob {
@@ -219,12 +216,13 @@ export class BackupIndexStore {
   }
 
   getLocalDirs(): Record<string, string> {
-    const f = this.storage.load(
-      BACKUP_INDEX_CATEGORY,
-      LocalDirsFile,
-      RESERVED_LOCAL_DIRS
-    ) as LocalDirsFile | null;
-    return f?.dirs ? { ...f.dirs } : {};
+    // The keys are destination IDs and cannot be declared in a hydration class.
+    const file = this.storage.load(BACKUP_INDEX_CATEGORY, null, RESERVED_LOCAL_DIRS);
+    const dirs: Record<string, string> = Object.create(null);
+    for (const [id, directory] of Object.entries(file?.dirs ?? {})) {
+      if (isValidBackupId(id) && typeof directory === "string") dirs[id] = directory;
+    }
+    return dirs;
   }
 
   /** Instance uuids that have an index file. */

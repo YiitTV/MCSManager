@@ -486,12 +486,29 @@ describe("restore", () => {
 
 describe("download", () => {
   it("direct mode registers a single-use daemon passport and hides the ticket", async () => {
+    const { dest } = await setup();
+    const local = (await getStoredDestination("local"))!;
+    fakeDaemon.on("backup/records", () => ({
+      records: [
+        {
+          id: "bk1",
+          copies: {
+            local: { status: "ok", type: "local", remoteId: "p_bk1.zip" },
+            [dest.id]: { status: "ok", type: "s3", remoteId: "remote.zip" }
+          }
+        }
+      ]
+    }));
     const r = await call("alice", "POST", "/backup/download", {
       daemonId: "d1",
       uuid: "inst1",
-      recordId: "bk1"
+      recordId: "bk1",
+      destinations: [{ id: "local", config: { directory: "/client-supplied" } }]
     });
     expect(r.http).toBe(200);
+    expect(fakeDaemon.callsOf("backup/download_ticket").map((c) => c.data)).toEqual([
+      { instanceUuid: "inst1", recordId: "bk1", destinations: [toPlainDestination(local)] }
+    ]);
     expect(r.data.fileName).toBe("p_bk1.zip");
     expect(r.text).not.toContain("TICKET-OPAQUE-VALUE");
     const reg = fakeDaemon.callsOf("passport/register")[0];

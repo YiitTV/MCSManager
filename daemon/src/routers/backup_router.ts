@@ -89,7 +89,7 @@ handle(BACKUP_PROTOCOL.RESTORE, (data) => {
 });
 
 handle(BACKUP_PROTOCOL.DOWNLOAD_TICKET, async (data): Promise<BackupDownloadTicketRes> => {
-  const req = data as BackupDownloadTicketReq & { destinations?: unknown };
+  const req = data as BackupDownloadTicketReq;
   const instanceUuid = requireInstance(req);
   const destinations = req.destinations ? validateDestinationList(req.destinations) : [];
   const file = await getBackupRunner().resolveLocalCopy(instanceUuid, req.recordId, destinations);

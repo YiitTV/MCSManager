@@ -10,6 +10,7 @@ import {
   BACKUP_SECRET_MASK,
   BackupCancelRes,
   BackupDestinationRef,
+  BackupDownloadTicketReq,
   BackupDownloadTicketRes,
   BackupErrorCode,
   BackupPlan,
@@ -665,6 +666,18 @@ export async function cancelJob(daemonId: string, instanceUuid: string, backupId
   });
 }
 
+async function destinationsForRecord(record: BackupRecord, localOnly = false) {
+  const destinations: PlainBackupDestination[] = [];
+  for (const [id, copy] of Object.entries(record.copies)) {
+    if (copy.status !== "ok" || (localOnly && copy.type !== "local")) continue;
+    const destination = await getStoredDestination(id);
+    if (destination && (!localOnly || destination.type === "local")) {
+      destinations.push(toPlainDestination(destination));
+    }
+  }
+  return destinations;
+}
+
 /** Restore: admin only (router), instance must be stopped (checked here), then `backup/restore`. */
 export async function restoreRecord(
   daemonId: string,
@@ -681,18 +694,10 @@ export async function restoreRecord(
   });
   if (detail?.status !== INSTANCE_STATUS_STOP)
     throw new BackupServiceError(BackupErrorCode.INSTANCE_MUST_BE_STOPPED, 409);
-  // Credentials are only needed when the record has no local copy; send those of its destinations
   const records = await getRecords(daemonId, instanceUuid);
   const record = records.find((r) => r.id === recordId);
   if (!record) throw new BackupServiceError(BackupErrorCode.RECORD_NOT_FOUND, 404);
-  const ids = Object.entries(record.copies)
-    .filter(([, c]) => c.status === "ok")
-    .map(([id]) => id);
-  const destinations: PlainBackupDestination[] = [];
-  for (const id of ids) {
-    const d = await getStoredDestination(id);
-    if (d) destinations.push(toPlainDestination(d));
-  }
+  const destinations = await destinationsForRecord(record);
   return daemonRequest<BackupRestoreRes>(
     daemonId,
     BACKUP_PROTOCOL.RESTORE,
@@ -711,10 +716,14 @@ export async function requestDownloadTicket(
       field: "recordId",
       code: BackupValidationCode.INVALID_ID
     });
-  return daemonRequest<BackupDownloadTicketRes>(daemonId, BACKUP_PROTOCOL.DOWNLOAD_TICKET, {
+  const records = await getRecords(daemonId, instanceUuid);
+  const record = records.find((r) => r.id === recordId);
+  const req: BackupDownloadTicketReq = {
     instanceUuid,
-    recordId
-  });
+    recordId,
+    destinations: record ? await destinationsForRecord(record, true) : []
+  };
+  return daemonRequest<BackupDownloadTicketRes>(daemonId, BACKUP_PROTOCOL.DOWNLOAD_TICKET, req);
 }
 
 // ---------------------------------------------------------------------------

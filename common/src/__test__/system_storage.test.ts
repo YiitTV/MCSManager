@@ -42,6 +42,12 @@ describe("StorageSubsystem.load", () => {
     expect((result as DummyConfig).name).toBe("custom");
   });
 
+  it("loads a stored backup directory map with its dynamic keys", () => {
+    const saved = { dirs: { local: "/backups", "custom-destination": "/other-backups" } };
+    StorageSubsystem.store("BackupIndex", "local_dirs", saved);
+    expect(StorageSubsystem.load("BackupIndex", null, "local_dirs")).toEqual(saved);
+  });
+
   it("returns null instead of throwing when the file contains corrupted JSON", () => {
     const dirPath = path.join(tmpDir, "data", "dummy_category");
     fs.mkdirsSync(dirPath);

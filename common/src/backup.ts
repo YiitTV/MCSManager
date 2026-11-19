@@ -736,7 +736,7 @@ export interface BackupRecordsRes {
   records: BackupRecord[];
 }
 
-/** `backup/restore` request. `destinations` are needed only to fetch a remote copy. */
+/** `backup/restore` request. */
 export interface BackupRestoreReq {
   instanceUuid: string;
   recordId: string;
@@ -752,6 +752,8 @@ export interface BackupRestoreRes {
 export interface BackupDownloadTicketReq {
   instanceUuid: string;
   recordId: string;
+  /** Configured local destinations for this record's successful copies. */
+  destinations?: PlainBackupDestination[];
 }
 /** `backup/download_ticket` response. */
 export interface BackupDownloadTicketRes {

@@ -25,6 +25,9 @@ const SUITES = [
   "security_sso_redirect",
   "security_auth",
   "instance_groups",
+  "instance_backups",
+  "backups_memory",
+  "notifications",
   "docker"
 ];
 
@@ -97,7 +100,9 @@ try {
 }
 let failed = false;
 const summary = [];
-for (const name of SUITES) {
+// Optional filter for local iteration: MCSM_IT_ONLY=suiteA,suiteB
+const only = (process.env.MCSM_IT_ONLY || "").split(",").filter(Boolean);
+for (const name of only.length ? SUITES.filter((s) => only.includes(s)) : SUITES) {
   if (name === "docker" && !dockerOk()) {
     summary.push("docker: SKIP (non-Linux / no Docker socket)");
     continue;

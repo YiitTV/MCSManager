@@ -9,7 +9,8 @@ export class MemoryBackupStorage implements BackupStorage {
   load(category: string, classz: any, uuid: string) {
     const v = this.data.get(`${category}/${uuid}`);
     if (!v) return null;
-    return Object.assign(new classz(), JSON.parse(JSON.stringify(v)));
+    const data = JSON.parse(JSON.stringify(v));
+    return classz === null ? data : Object.assign(new classz(), data);
   }
   list(category: string) {
     return [...this.data.keys()]
