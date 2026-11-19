@@ -2,6 +2,7 @@
 import LeftMenusPanel from "@/components/LeftMenusPanel.vue";
 import { parseGdriveRedirect } from "@/hooks/useBackupGdriveRedirect";
 import BackupDestinations from "@/widgets/backup/BackupDestinations.vue";
+import NotificationSettings from "@/widgets/NotificationSettings.vue";
 import Loading from "@/components/Loading.vue";
 import { useUploadFileDialog } from "@/components/fc";
 import { router } from "@/config/router";
@@ -23,6 +24,7 @@ import { DataPlaneMode, type LayoutCard, type Settings } from "@/types";
 import {
   ApiOutlined,
   BankOutlined,
+  BellOutlined,
   BookOutlined,
   BugOutlined,
   CloudUploadOutlined,
@@ -142,6 +144,11 @@ const menus = arrayFilter([
     title: t("TXT_CODE_backup_ui.destinationsTitle"),
     key: "backupDestinations",
     icon: DatabaseOutlined
+  },
+  {
+    title: t("TXT_CODE_notification_ui.tab"),
+    key: "notification",
+    icon: BellOutlined
   },
 
   {
@@ -1481,6 +1488,10 @@ onUnmounted(() => {
                 </a-form>
               </div>
             </div>
+          </template>
+
+          <template #notification>
+            <NotificationSettings :max-height="card.height" />
           </template>
 
           <template #autoUpdate>

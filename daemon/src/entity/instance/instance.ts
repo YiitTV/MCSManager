@@ -24,6 +24,7 @@ import { STEAM_CMD_PATH } from "../../const";
 import { $t } from "../../i18n";
 import javaManager from "../../service/java_manager";
 import logger from "../../service/log";
+import { isDaemonShuttingDown, notifyInstanceLifecycle } from "../../service/panel_notifier";
 import InstanceCommand from "../commands/base/command";
 import { commandStringToArray } from "../commands/base/command_parser";
 import FunctionDispatcher, { IPresetCommand } from "../commands/dispatcher";
@@ -100,6 +101,8 @@ export default class Instance extends EventEmitter {
   public lock: boolean = false;
   public startCount: number = 0;
   public autoRestartCount: number = 0;
+  // Set just before an automatic restart; consumed by the next open event
+  private pendingAutoRestart: { attempt: number; max: number } | null = null;
   public startTimestamp: number = 0;
   public asynchronousTask?: IExecutable | null;
   public openFrp?: OpenFrp;
@@ -383,6 +386,7 @@ export default class Instance extends EventEmitter {
     this.process = process;
     this.instanceStatus = Instance.STATUS_RUNNING;
     this.emit("open", this);
+    this.notifyStarted();
 
     // start all lifecycle tasks
     this.lifeCycleTaskManager.execLifeCycleTask(1);
@@ -400,6 +404,14 @@ export default class Instance extends EventEmitter {
   // function that must be executed after the instance has been closed
   // trigger exit event
   stopped(code = 0) {
+    // Classify before eventTask.ignore is reset and before the auto-restart branch runs
+    const expectedStop =
+      this.instanceStatus === Instance.STATUS_STOPPING ||
+      this.config.eventTask?.ignore === true ||
+      isDaemonShuttingDown();
+    const wasRunning = this.instanceStatus != Instance.STATUS_STOP;
+    this.pendingAutoRestart = null;
+    if (wasRunning && !isDaemonShuttingDown()) this.notifyStopped(code, expectedStop);
     // Close all lifecycle tasks
     this.stopOutputLoop();
     this.println("INFO", $t("TXT_CODE_70ce6fbb"));
@@ -417,12 +429,14 @@ export default class Instance extends EventEmitter {
     if (!this.config.eventTask.ignore && this.config.eventTask.autoRestart) {
       const maxAutoRestartCount = this.config.eventTask.autoRestartMaxTimes;
       if (maxAutoRestartCount == -1 || this.autoRestartCount < maxAutoRestartCount) {
+        this.pendingAutoRestart = { attempt: this.autoRestartCount + 1, max: maxAutoRestartCount };
         this.execPreset("start")
           .then(() => {
             this.autoRestartCount++;
             this.println($t("TXT_CODE_instanceConf.info"), $t("TXT_CODE_instanceConf.autoRestart"));
           })
           .catch((err) => {
+            this.pendingAutoRestart = null;
             this.println(
               $t("TXT_CODE_instanceConf.error"),
               $t("TXT_CODE_instanceConf.autoRestartErr", { err: err })
@@ -440,6 +454,56 @@ export default class Instance extends EventEmitter {
     const startThreshold = 2 * 1000;
     if (currentTimestamp - this.startTimestamp < startThreshold) {
       this.println("ERROR", $t("TXT_CODE_aae2918f"));
+    }
+  }
+
+  // Lifecycle notifications to the panel: must never throw into instance lifecycle code
+  private notifyStarted() {
+    try {
+      const base = {
+        instanceUuid: this.instanceUuid,
+        instanceName: String(this.config.nickname ?? ""),
+        at: Date.now(),
+        exitCode: null
+      };
+      const pending = this.pendingAutoRestart;
+      this.pendingAutoRestart = null;
+      if (pending) {
+        notifyInstanceLifecycle({
+          ...base,
+          kind: "auto_restarted",
+          attempt: pending.attempt,
+          maxAttempts: pending.max === -1 ? null : pending.max
+        });
+      } else {
+        notifyInstanceLifecycle({ ...base, kind: "started" });
+      }
+    } catch (err: any) {
+      logger.debug(`notifyStarted failed: ${err?.message ?? err}`);
+    }
+  }
+
+  private notifyStopped(code: number, expected: boolean) {
+    try {
+      const exitCode = typeof code === "number" && Number.isFinite(code) ? code : null;
+      const base = {
+        instanceUuid: this.instanceUuid,
+        instanceName: String(this.config.nickname ?? ""),
+        at: Date.now(),
+        exitCode
+      };
+      if (expected) {
+        notifyInstanceLifecycle({ ...base, kind: "stopped" });
+        return;
+      }
+      const ev = this.config.eventTask;
+      const max = ev?.autoRestartMaxTimes;
+      const willAutoRestart = Boolean(
+        ev?.autoRestart && !ev?.ignore && (max == -1 || this.autoRestartCount < max)
+      );
+      notifyInstanceLifecycle({ ...base, kind: "crashed", willAutoRestart });
+    } catch (err: any) {
+      logger.debug(`notifyStopped failed: ${err?.message ?? err}`);
     }
   }
 

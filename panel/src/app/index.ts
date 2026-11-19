@@ -14,11 +14,13 @@ import filemanager_router from "./routers/filemananger_router";
 import lowUserRouter from "./routers/general_user_router";
 import instanceRouter from "./routers/instance_admin_router";
 import exchangeRouter from "./routers/instance_exchange_router";
+import instanceGroupRouter from "./routers/instance_group_router";
 import userInstanceRouter from "./routers/instance_operate_router";
 import javaManagerRouter from "./routers/java_manager_router";
 import loginRouter from "./routers/login_router";
 import businessUserRouter from "./routers/manage_user_router";
 import modManagerRouter from "./routers/mod_manager_router";
+import notificationRouter from "./routers/notification_router";
 import overviewRouter from "./routers/overview_router";
 import scheduleRouter from "./routers/schedule_router";
 import settingsRouter from "./routers/settings_router";
@@ -45,6 +47,9 @@ export function mountRouters(app: Koa<Koa.DefaultState, Koa.DefaultContext>) {
   apiRouter.use(javaManagerRouter.routes()).use(javaManagerRouter.allowedMethods());
   apiRouter.use(modManagerRouter.routes()).use(modManagerRouter.allowedMethods());
   apiRouter.use(upgradeRouter.routes()).use(upgradeRouter.allowedMethods());
+  apiRouter.use(instanceGroupRouter.routes()).use(instanceGroupRouter.allowedMethods());
+
+  apiRouter.use(notificationRouter.routes()).use(notificationRouter.allowedMethods());
 
   apiRouter.use(backupRouter.routes()).use(backupRouter.allowedMethods());
 

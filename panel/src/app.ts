@@ -19,9 +19,11 @@ import { mountRouters } from "./app/index";
 import { preCheckMiddleware } from "./app/middleware/precheck";
 import { middleware as protocolMiddleware } from "./app/middleware/protocol";
 import { logger } from "./app/service/log";
+import instanceGroupService from "./app/service/instance_group_service";
 import SystemRemoteService from "./app/service/remote_service";
 import SystemUser from "./app/service/user_service";
 import versionAdapter from "./app/service/version_adapter";
+import { loadNotificationConfig } from "./app/service/notification_config_service";
 import { initSystemConfig, systemConfig } from "./app/setting";
 import ProxyDataPlane from "./app/service/proxy_data_plane";
 import SocketService from "./app/service/socket_service";
@@ -122,6 +124,13 @@ async function main() {
     Storage.setStorageType(Storage.TYPE.REDIS);
   }
 
+  // Notification settings live in their own record (feature stays disabled when absent)
+  try {
+    await loadNotificationConfig();
+  } catch (err: any) {
+    logger.warn(`Failed to load notification settings: ${err?.name ?? "error"}`);
+  }
+
   initVersionManager();
   const VERSION = getVersion();
 
@@ -144,6 +153,7 @@ _  /  / / / /___  ____/ /_  /  / / / /_/ /_  / / / /_/ /_  /_/ //  __/  /
   // Initialize services
   await SystemUser.initialize();
   await SystemRemoteService.initialize();
+  await instanceGroupService.initialize();
 
   const app = new Koa({
     proxy: systemConfig?.reverseProxyMode || false,

@@ -16,6 +16,7 @@ import InstanceConfig from "../entity/instance/Instance_config";
 import { $t } from "../i18n";
 import { sleep } from "../utils/sleep";
 import logger from "./log";
+import { setDaemonShuttingDown } from "./panel_notifier";
 import InstanceControl from "./system_instance_control";
 import takeoverContainer from "./takeover_container";
 
@@ -278,6 +279,7 @@ class InstanceSubsystem extends EventEmitter {
   }
 
   exit(force = false) {
+    setDaemonShuttingDown();
     const promises: Promise<void>[] = [];
     for (const iterator of this.instances) {
       const instance = iterator[1];
@@ -318,6 +320,7 @@ class InstanceSubsystem extends EventEmitter {
 
   // Soft exit: optional docker skip and configurable wait timeout
   softExit(skipDocker = true, waitSeconds = 10) {
+    setDaemonShuttingDown();
     const promises: Promise<void>[] = [];
     for (const iterator of this.instances) {
       const instance = iterator[1];

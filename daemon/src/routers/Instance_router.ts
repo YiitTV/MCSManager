@@ -185,6 +185,31 @@ routerApp.on("instance/detail", async (ctx, data) => {
   }
 });
 
+// Cheap read-only batch status query (used by panel instance groups).
+// Returns uuid, nickname and status only; unknown uuids are omitted.
+const STATUS_BATCH_MAX = 30;
+routerApp.on("instance/status_batch", (ctx, data) => {
+  try {
+    const uuids = data?.instanceUuids;
+    if (!Array.isArray(uuids) || uuids.length > STATUS_BATCH_MAX)
+      throw new Error(`instanceUuids must be an array of at most ${STATUS_BATCH_MAX} items`);
+    const instances: { instanceUuid: string; nickname: string; status: number }[] = [];
+    for (const instanceUuid of uuids) {
+      if (typeof instanceUuid !== "string") throw new Error("instanceUuids must contain strings");
+      const instance = InstanceSubsystem.getInstance(instanceUuid);
+      if (!instance) continue;
+      instances.push({
+        instanceUuid: instance.instanceUuid,
+        nickname: instance.config.nickname,
+        status: instance.status()
+      });
+    }
+    protocol.msg(ctx, "instance/status_batch", { instances });
+  } catch (err: any) {
+    protocol.error(ctx, "instance/status_batch", { err: err.message });
+  }
+});
+
 // create a new application instance
 routerApp.on("instance/new", (ctx, data) => {
   const config = data;

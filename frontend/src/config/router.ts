@@ -3,12 +3,14 @@ import { useAppStateStore } from "@/stores/useAppStateStore";
 import { useLayoutContainerStore } from "@/stores/useLayoutContainerStore";
 import type { LoginUserInfo } from "@/types/user";
 import InstallPage from "@/views/Install.vue";
+import InstanceGroupsPage from "@/views/InstanceGroups.vue";
 import LayoutContainer from "@/views/LayoutContainer.vue";
 import LoginPage from "@/views/Login.vue";
 import SsoBindLogin from "@/views/SsoBindLogin.vue";
 import {
   ApartmentOutlined,
   AppstoreOutlined,
+  BranchesOutlined,
   AreaChartOutlined,
   LinkOutlined,
   LoginOutlined,
@@ -171,6 +173,17 @@ const originRouterConfig: RouterConfig[] = [
         ]
       }
     ]
+  },
+  {
+    // Visible to every logged-in user: groups only ever contain instances the owner may operate.
+    path: "/instance-groups",
+    name: t("TXT_CODE_instance_group_ui.title"),
+    component: InstanceGroupsPage,
+    meta: {
+      mainMenu: true,
+      permission: ROLE.USER,
+      icon: BranchesOutlined
+    }
   },
   {
     path: "/market",

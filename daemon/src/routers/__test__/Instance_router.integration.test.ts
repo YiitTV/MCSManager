@@ -765,3 +765,37 @@ describe("background mod installation", () => {
     error.mockRestore();
   });
 });
+
+describe("instance/status_batch (read-only batch status)", () => {
+  it("returns uuid, nickname and status for known instances and omits unknown ones", async () => {
+    const a = createInstance(generalConfig("status-batch-a"));
+    const b = createInstance(generalConfig("status-batch-b"));
+    const { socket } = invoke("instance/status_batch", {
+      instanceUuids: [a.uuid, "does-not-exist", b.uuid]
+    });
+    await flush();
+    const pkt = packetsFor(socket, "instance/status_batch")[0];
+    expect(pkt.status).toBe(200);
+    expect(pkt.data.instances).toEqual([
+      { instanceUuid: a.uuid, nickname: "status-batch-a", status: Instance.STATUS_STOP },
+      { instanceUuid: b.uuid, nickname: "status-batch-b", status: Instance.STATUS_STOP }
+    ]);
+    // Read-only: nothing was started
+    expect(a.inst.status()).toBe(Instance.STATUS_STOP);
+  });
+
+  it("rejects non-array, non-string and oversized input", async () => {
+    const tooMany = Array.from({ length: 31 }, (_, i) => `u${i}`);
+    for (const instanceUuids of ["abc", { length: 1 }, [1], [{}], tooMany]) {
+      const { socket } = invoke("instance/status_batch", { instanceUuids });
+      await flush();
+      const pkt = packetsFor(socket, "instance/status_batch")[0];
+      expect(pkt.status).toBe(500);
+    }
+    const ok = invoke("instance/status_batch", {
+      instanceUuids: Array.from({ length: 30 }, (_, i) => `u${i}`)
+    });
+    await flush();
+    expect(packetsFor(ok.socket, "instance/status_batch")[0].data).toEqual({ instances: [] });
+  });
+});
