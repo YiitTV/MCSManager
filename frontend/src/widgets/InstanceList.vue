@@ -17,11 +17,13 @@ import {
   SearchOutlined,
   WarningOutlined
 } from "@ant-design/icons-vue";
-import { computed, h, onMounted, ref } from "vue";
+import { computed, h, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 
 import BetweenMenus from "@/components/BetweenMenus.vue";
 import { openMarketDialog } from "@/components/fc";
 import { router } from "@/config/router";
+import { useInstanceListView } from "@/hooks/useInstanceListView";
 import { useInstanceTagSearch, useInstanceTagTips } from "@/hooks/useInstanceTag";
 import { useScreen } from "@/hooks/useScreen";
 import { remoteInstances, remoteInstancesGlobal, remoteNodeList } from "@/services/apis";
@@ -33,6 +35,7 @@ import {
   batchStop,
   getInstanceInfo
 } from "@/services/apis/instance";
+import { useAppStateStore } from "@/stores/useAppStateStore";
 import { reportErrorMsg } from "@/tools/validator";
 import type { AntColumnsType } from "@/types/ant";
 import { INSTANCE_STATUS } from "@/types/const";
@@ -48,12 +51,33 @@ import {
 import type { NodeStatus } from "../types/index";
 import InstanceLine from "./instance/InstanceLine.vue";
 import Shortcut from "./instance/Shortcut.vue";
+import InstanceGroupsBoard from "./instanceGroup/InstanceGroupsBoard.vue";
+import UserInstanceList from "./UserInstanceList.vue";
 
 defineProps<{
   card: LayoutCard;
 }>();
 
 const { isPhone } = useScreen();
+const { isAdmin } = useAppStateStore();
+const route = useRoute();
+const { view, selectView } = useInstanceListView();
+const isInstancesPage = computed(() => route.path === "/instances");
+const isGrouped = computed(() => isInstancesPage.value && view.value === "grouped");
+const normalLoaded = ref(false);
+
+watch(
+  () => route.query.view,
+  (requestedView) => {
+    if (!isInstancesPage.value || requestedView !== "grouped") return;
+    selectView("grouped");
+    const query = { ...route.query };
+    delete query.view;
+    void router.replace({ query, hash: route.hash });
+  },
+  { immediate: true }
+);
+
 const operationForm = ref({
   instanceName: "",
   currentPage: 1,
@@ -104,13 +128,19 @@ const initNodes = async () => {
   if (nodes.value?.length === 0) {
     return reportErrorMsg(t("TXT_CODE_e3d96a26"));
   }
-  currentRemoteNode.value = resolveStoredRemoteNode(
-    localStorage.getItem(SELECTED_REMOTE_STORAGE_KEY),
-    nodes.value ?? [],
-    globalNode
-  );
+  let storedNode: string | null = null;
+  try {
+    storedNode = localStorage.getItem(SELECTED_REMOTE_STORAGE_KEY);
+  } catch {
+    // Fall back to the default node when browser storage is unavailable.
+  }
+  currentRemoteNode.value = resolveStoredRemoteNode(storedNode, nodes.value ?? [], globalNode);
   if (currentRemoteNode.value) {
-    localStorage.setItem(SELECTED_REMOTE_STORAGE_KEY, JSON.stringify(currentRemoteNode.value));
+    try {
+      localStorage.setItem(SELECTED_REMOTE_STORAGE_KEY, JSON.stringify(currentRemoteNode.value));
+    } catch {
+      // The selected node is already available for this visit.
+    }
   }
 };
 
@@ -528,15 +558,47 @@ const batchDeleteInstance = async (deleteFile: boolean) => {
   });
 };
 
-onMounted(async () => {
-  await initInstancesData();
-  setRefreshFn(initInstancesData);
-});
+watch(
+  isGrouped,
+  async (grouped) => {
+    if (grouped || normalLoaded.value) return;
+    normalLoaded.value = true;
+    if (isAdmin.value) {
+      await initInstancesData();
+      setRefreshFn(initInstancesData);
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
   <div style="min-height: 100%" class="container">
-    <a-row :gutter="[24, 24]" style="min-height: 100%">
+    <a-button-group v-if="isInstancesPage" class="instance-view-switch">
+      <a-button
+        :type="isGrouped ? 'default' : 'primary'"
+        :aria-pressed="!isGrouped"
+        @click="selectView('normal')"
+      >
+        {{ t("TXT_CODE_instance_group_ui.viewNormal") }}
+      </a-button>
+      <a-button
+        :type="isGrouped ? 'primary' : 'default'"
+        :aria-pressed="isGrouped"
+        @click="selectView('grouped')"
+      >
+        {{ t("TXT_CODE_instance_group_ui.viewGrouped") }}
+      </a-button>
+    </a-button-group>
+    <InstanceGroupsBoard v-if="isGrouped" :card="card" @open-instance="toAppDetailPage" />
+
+    <UserInstanceList v-if="normalLoaded && !isAdmin" v-show="!isGrouped" :card="card" />
+    <a-row
+      v-if="normalLoaded && isAdmin"
+      v-show="!isGrouped"
+      :gutter="[24, 24]"
+      style="min-height: 100%"
+    >
       <a-col :span="24">
         <BetweenMenus>
           <template v-if="!isPhone" #left>
@@ -805,6 +867,10 @@ onMounted(async () => {
 </template>
 
 <style lang="scss" scoped>
+.instance-view-switch {
+  margin-bottom: 12px;
+}
+
 .search-input {
   transition: all 0.6s;
   text-align: center;

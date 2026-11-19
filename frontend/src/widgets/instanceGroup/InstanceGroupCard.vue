@@ -10,19 +10,13 @@ import {
 } from "@/types/instanceGroup";
 import {
   CloseCircleOutlined,
-  CodeOutlined,
   DeleteOutlined,
   EditOutlined,
   PlayCircleOutlined,
   PoweroffOutlined
 } from "@ant-design/icons-vue";
 import { computed } from "vue";
-import {
-  isMemberUnavailable,
-  memberStatusColor,
-  memberStatusLabel,
-  stepReasonLabel
-} from "./status";
+import { stepReasonLabel } from "./status";
 
 const props = defineProps<{
   group: InstanceGroupView;
@@ -37,29 +31,21 @@ const emit = defineEmits<{
   cancel: [];
   edit: [];
   remove: [];
-  openConsole: [member: GroupMemberView];
 }>();
 
 const active = computed(() => isRunActive(props.run));
 
-// While a stop is running, rows follow the stop order, otherwise the start order.
-const rows = computed(() => {
-  const list = [...props.group.members];
-  if (active.value && props.run?.action === "stop") {
-    const index = new Map(props.group.stopOrder.map((key, i) => [key, i]));
-    list.sort((a, b) => (index.get(memberKey(a)) ?? 0) - (index.get(memberKey(b)) ?? 0));
-  }
-  return list.map((member) => {
+defineSlots<{
+  member(props: { member: GroupMemberView }): unknown;
+}>();
+
+const steps = computed(() => new Map(props.run?.steps.map((step) => [step.key, step])));
+const rows = computed(() =>
+  props.group.members.map((member) => {
     const key = memberKey(member);
-    return {
-      member,
-      key,
-      startPos: props.group.members.findIndex((m) => memberKey(m) === key) + 1,
-      stopPos: props.group.stopOrder.indexOf(key) + 1,
-      step: props.run?.steps.find((s) => s.key === key)
-    };
-  });
-});
+    return { member, key, step: steps.value.get(key) };
+  })
+);
 
 const finishedSteps = computed(
   () => props.run?.steps.filter((s) => s.state === "done" || s.state === "skipped").length ?? 0
@@ -176,16 +162,22 @@ const stepColor = (step: GroupRunStep | undefined) => {
           <template #icon><PoweroffOutlined /></template>
           {{ t("TXT_CODE_instance_group_ui.stop") }}
         </a-button>
-        <a-button v-if="active" danger data-test="btn-cancel" @click="emit('cancel')">
+        <a-button
+          v-if="active"
+          danger
+          data-test="btn-cancel"
+          :disabled="pending"
+          @click="emit('cancel')"
+        >
           <template #icon><CloseCircleOutlined /></template>
           {{ t("TXT_CODE_instance_group_ui.cancel") }}
         </a-button>
-        <span class="group-actions-divider" />
         <a-button
           type="text"
           data-test="btn-edit"
-          :disabled="active"
+          :disabled="active || pending"
           :title="t('TXT_CODE_instance_group_ui.edit')"
+          :aria-label="t('TXT_CODE_instance_group_ui.edit')"
           @click="emit('edit')"
         >
           <template #icon><EditOutlined /></template>
@@ -194,8 +186,9 @@ const stepColor = (step: GroupRunStep | undefined) => {
           type="text"
           danger
           data-test="btn-delete"
-          :disabled="active"
+          :disabled="active || pending"
           :title="t('TXT_CODE_instance_group_ui.delete')"
+          :aria-label="t('TXT_CODE_instance_group_ui.delete')"
           @click="emit('remove')"
         >
           <template #icon><DeleteOutlined /></template>
@@ -219,33 +212,8 @@ const stepColor = (step: GroupRunStep | undefined) => {
     </div>
 
     <ol class="member-list">
-      <li
-        v-for="row in rows"
-        :key="row.key"
-        class="member-row"
-        :class="{ 'member-unavailable': isMemberUnavailable(row.member) }"
-        data-test="member-row"
-      >
-        <span class="member-order" :title="t('TXT_CODE_instance_group_ui.orderHint')">
-          {{ t("TXT_CODE_instance_group_ui.startShort") }} {{ row.startPos }}
-          <span class="member-order-sep">/</span>
-          {{ t("TXT_CODE_instance_group_ui.stopShort") }} {{ row.stopPos }}
-        </span>
-        <span class="member-name" data-test="member-name">
-          {{
-            isMemberUnavailable(row.member)
-              ? t("TXT_CODE_instance_group_ui.unavailable")
-              : row.member.nickname || row.member.instanceUuid
-          }}
-        </span>
-        <a-tag
-          v-if="!isMemberUnavailable(row.member)"
-          :color="memberStatusColor(row.member)"
-          class="member-status"
-          data-test="member-status"
-        >
-          {{ memberStatusLabel(row.member) }}
-        </a-tag>
+      <li v-for="row in rows" :key="row.key" class="member-row" data-test="member-row">
+        <slot name="member" :member="row.member" />
         <span class="member-step">
           <a-tag
             v-if="row.step && run"
@@ -259,16 +227,6 @@ const stepColor = (step: GroupRunStep | undefined) => {
             stepReasonLabel(row.step.reason)
           }}</span>
         </span>
-        <a-button
-          size="small"
-          data-test="btn-console"
-          :disabled="isMemberUnavailable(row.member)"
-          :title="t('TXT_CODE_instance_group_ui.openConsole')"
-          @click="emit('openConsole', row.member)"
-        >
-          <template #icon><CodeOutlined /></template>
-          <span class="console-btn-text">{{ t("TXT_CODE_instance_group_ui.openConsole") }}</span>
-        </a-button>
       </li>
     </ol>
   </section>
@@ -280,7 +238,7 @@ const stepColor = (step: GroupRunStep | undefined) => {
   background-color: var(--background-color-white);
   color: var(--text-color);
   box-shadow: 0 1px 2px 1px var(--card-shadow-color);
-  padding: 16px;
+  padding: 12px;
 }
 
 .group-header {
@@ -301,7 +259,6 @@ const stepColor = (step: GroupRunStep | undefined) => {
 
 .group-name {
   margin: 0 !important;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -320,13 +277,6 @@ const stepColor = (step: GroupRunStep | undefined) => {
   gap: 8px;
 }
 
-.group-actions-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--card-border-color);
-  margin: 0 4px;
-}
-
 .run-banner {
   border: 1px solid var(--card-border-color);
   border-left: 3px solid var(--color-primary);
@@ -336,6 +286,7 @@ const stepColor = (step: GroupRunStep | undefined) => {
   .run-banner-line {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .run-state {
@@ -349,91 +300,30 @@ const stepColor = (step: GroupRunStep | undefined) => {
 }
 
 .member-list {
+  display: grid;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.member-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-top: 1px solid var(--card-border-color);
-
-  &:first-child {
-    border-top: none;
-  }
-}
-
-.member-order {
-  flex: 0 0 74px;
-  font-size: var(--font-body2);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.6;
-  white-space: nowrap;
-}
-
-.member-order-sep {
-  opacity: 0.5;
-}
-
-.member-name {
-  flex: 1 1 140px;
-  min-width: 0;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.member-status,
-.member-step :deep(.ant-tag) {
-  margin: 0;
-}
-
 .member-step {
-  flex: 0 1 220px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  gap: 4px 8px;
+  padding-top: 4px;
+
+  .ant-tag {
+    margin: 0;
+  }
+
+  &:empty {
+    display: none;
+  }
 }
 
 .member-reason {
   font-size: var(--font-body2);
-  opacity: 0.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.member-unavailable {
-  opacity: 0.5;
-  font-style: italic;
-
-  .member-name {
-    font-weight: 400;
-  }
-}
-
-@media (max-width: 992px) {
-  .member-row {
-    flex-wrap: wrap;
-    row-gap: 4px;
-  }
-  .member-order {
-    flex-basis: 100%;
-  }
-  .member-step {
-    flex-basis: 100%;
-    order: 5;
-  }
-  .console-btn-text {
-    display: none;
-  }
-  .group-name {
-    max-width: 200px;
-  }
 }
 </style>
