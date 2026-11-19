@@ -3,6 +3,7 @@ import { IGNORE } from "../const";
 import { globalConfiguration } from "../entity/config";
 import RouterContext from "../entity/ctx";
 import { $t } from "../i18n";
+import { addAuthenticatedSocket } from "../service/authenticated_sockets";
 import logger from "../service/log";
 import { LOGIN_BY_TOP_LEVEL, loginSuccessful } from "../service/mission_passport";
 import * as protocol from "../service/protocol";
@@ -69,6 +70,7 @@ routerApp.on("auth", (ctx, data) => {
 
       // Log the authentication success
       loginSuccessful(ctx, data);
+      addAuthenticatedSocket(ctx.socket);
 
       protocol.msg(ctx, "auth", true);
     } else {

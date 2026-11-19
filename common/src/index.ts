@@ -69,4 +69,7 @@ export {
   normalizeDockerPlatform
 } from "./docker_utils";
 
+export * from "./backup";
+export * from "./backup_validation";
+
 export { GlobalVariable, InstanceStreamListener, MCServerStatus, StorageSubsystem };

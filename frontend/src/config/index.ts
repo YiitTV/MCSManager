@@ -11,6 +11,7 @@ import InstanceFileManager from "@/widgets/instance/FileManager.vue";
 import InstanceManagerBtns from "@/widgets/instance/ManagerBtns.vue";
 import InstanceModManager from "@/widgets/instance/ModManager.vue";
 import Schedule from "@/widgets/instance/Schedule.vue";
+import Backups from "@/widgets/instance/Backups.vue";
 import InstanceServerConfigFile from "@/widgets/instance/ServerConfigFile.vue";
 import InstanceServerConfigOverview from "@/widgets/instance/ServerConfigOverview.vue";
 import InstanceShortcut from "@/widgets/instance/Shortcut.vue";
@@ -82,6 +83,7 @@ export const LAYOUT_CARD_TYPES: { [key: string]: any } = {
   ImageManager,
   NewImage,
   Schedule,
+  InstanceBackups: Backups,
   InstanceShortcut,
   DefaultCard,
   Carousel,

@@ -78,7 +78,7 @@ Durable project knowledge stays in this file and `docs/`; `openspec/config.yaml`
 
 - All JSON data models persist through `StorageSubsystem` (`common/src/system_storage.ts`): atomic tmp-file + rename into `data/<Category>/<uuid>.json`. Do not hand-roll `fs.writeFile` for config/data storage.
 - Panel side: use `Storage.getStorage().store(...)` (`panel/src/app/common/storage/sys_storage.ts`) — it transparently swaps to Redis when `redisUrl` is configured. Daemon uses the `StorageSubsystem` singleton directly.
-- Sensitive files (never log their contents): `daemon/data/Config/global.json` (panel↔daemon key), `panel/data/User/*.json` (apiKey, password hash, 2FA secret), `panel/data/RemoteServiceConfig/*.json` (node apiKey).
+- Sensitive files (never log their contents): `daemon/data/Config/global.json` (panel↔daemon key), `panel/data/User/*.json` (apiKey, password hash, 2FA secret), `panel/data/RemoteServiceConfig/*.json` (node apiKey), `panel/data/Config/backup_secret.key` (AES-256-GCM key for backup destination secrets, mode 0600), `panel/data/BackupDestination/*.json` (encrypted S3 / Google Drive secrets and refresh tokens), `panel/data/BackupPlan/*.json` (backup plans: paths and destination ids).
 
 ## 6. General Coding Rules
 

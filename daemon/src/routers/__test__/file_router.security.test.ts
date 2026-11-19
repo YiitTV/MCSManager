@@ -515,7 +515,9 @@ describe("file_router security: per-instance workspace isolation (real FileManag
   // containment itself. '<dest>/link/../x' collapses to '<dest>/x' under
   // path.resolve() but means '<outside-parent>/x' to the extractor whenever a
   // pre-existing 'link' points outside the workspace.
-  const nonZipEntries = async (entries: Array<{ name: string; isDirectory: boolean; linkTarget?: string }>) => {
+  const nonZipEntries = async (
+    entries: Array<{ name: string; isDirectory: boolean; linkTarget?: string }>
+  ) => {
     fs.writeFileSync(path.join(sandbox.dirA, "evil.7z"), "not-a-real-archive");
     (listArchiveEntries as any).mockImplementation(async () => entries);
   };
@@ -544,7 +546,11 @@ describe("file_router security: per-instance workspace isolation (real FileManag
   it("file/compress type=0: entry 'sub/link/../x' (outward link inside a real dir) -> {500} and decompress NOT called", async () => {
     if (!linkOk) return;
     fs.mkdirSync(path.join(sandbox.dirA, "sub"), { recursive: true });
-    fs.symlinkSync(sandbox.dirB, path.join(sandbox.dirA, "sub", "link"), process.platform === "win32" ? "junction" : "dir");
+    fs.symlinkSync(
+      sandbox.dirB,
+      path.join(sandbox.dirA, "sub", "link"),
+      process.platform === "win32" ? "junction" : "dir"
+    );
     await nonZipEntries([{ name: "sub/link/../escape2.txt", isDirectory: false }]);
     const pkt = await call("file/compress", {
       instanceUuid: "a",

@@ -375,6 +375,31 @@ export const useOperationLog = () => {
         managementText: getChangedKeys(item),
         data: { operator_name: getOperatorLabel(item) }
       })
+    },
+    instance_backup: {
+      title: t("TXT_CODE_backup_ui.opBackupTitle"),
+      render: (item) => ({
+        text: t(`TXT_CODE_backup_ui.opBackup_${item.action}`),
+        managementText: item.plan_name ? `<<plan_name>>` : undefined,
+        data: {
+          operator_name: getOperatorLabel(item),
+          instance_name: item.instance_name || item.instance_id,
+          plan_name: item.plan_name ?? ""
+        }
+      })
+    },
+    backup_config_change: {
+      title: t("TXT_CODE_backup_ui.opConfigTitle"),
+      render: (item) => ({
+        text: t("TXT_CODE_backup_ui.opConfigText"),
+        managementText: item.target_name ? `<<target_name>>` : undefined,
+        data: {
+          operator_name: getOperatorLabel(item),
+          target: t(`TXT_CODE_backup_ui.opTarget_${item.target}`),
+          action: t(`TXT_CODE_backup_ui.opAction_${item.action}`),
+          target_name: item.target_name ?? ""
+        }
+      })
     }
   };
 

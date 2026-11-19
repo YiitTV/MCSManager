@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import LeftMenusPanel from "@/components/LeftMenusPanel.vue";
+import { parseGdriveRedirect } from "@/hooks/useBackupGdriveRedirect";
+import BackupDestinations from "@/widgets/backup/BackupDestinations.vue";
 import Loading from "@/components/Loading.vue";
 import { useUploadFileDialog } from "@/components/fc";
 import { router } from "@/config/router";
@@ -24,6 +26,7 @@ import {
   BookOutlined,
   BugOutlined,
   CloudUploadOutlined,
+  DatabaseOutlined,
   EditOutlined,
   FileProtectOutlined,
   GithubOutlined,
@@ -134,6 +137,11 @@ const menus = arrayFilter([
     title: t("TXT_CODE_SSO_TAB_TITLE"),
     key: "sso",
     icon: ApiOutlined
+  },
+  {
+    title: t("TXT_CODE_backup_ui.destinationsTitle"),
+    key: "backupDestinations",
+    icon: DatabaseOutlined
   },
 
   {
@@ -503,6 +511,21 @@ onMounted(async () => {
   setTimeout(() => {
     if (router.currentRoute.value.query.tab === "pro") {
       leftMenusPanelRef.value?.setActiveKey("pro");
+    }
+    const gdrive = parseGdriveRedirect(router.currentRoute.value.query);
+    if (gdrive) {
+      leftMenusPanelRef.value?.setActiveKey("backupDestinations");
+      if (gdrive.type === "success") message.success(gdrive.text);
+      else message.error(gdrive.text);
+      const route = router.currentRoute.value;
+      router.replace({
+        query: {
+          ...route.query,
+          backupGdrive: undefined,
+          reason: undefined,
+          destinationId: undefined
+        }
+      });
     }
   }, 100);
 
@@ -1610,6 +1633,10 @@ onUnmounted(() => {
                 <pre style="font-size: 13px">{{ ApacheLicense }}</pre>
               </a-typography-paragraph>
             </div>
+          </template>
+
+          <template #backupDestinations>
+            <BackupDestinations />
           </template>
 
           <template #sponsor>
