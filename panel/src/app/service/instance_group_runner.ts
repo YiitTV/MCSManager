@@ -15,6 +15,7 @@ import { DaemonEventStream, openDaemonEventStream } from "./daemon_event_stream"
 import { PatternLineMatcher } from "./instance_group_matcher";
 import instanceGroupService, { InstanceGroupError } from "./instance_group_service";
 import { logger } from "./log";
+import { emitNotification } from "./notification_service";
 import { operationLogger } from "./operation_logger";
 import RemoteRequest, { RemoteRequestTimeoutError } from "./remote_command";
 import RemoteServiceSubsystem from "./remote_service";
@@ -139,6 +140,7 @@ export class InstanceGroupRunner {
       if (run.state === "running") run.state = "failed";
     });
     active.done = active.done.finally(() => this.finish(active));
+    this.notify(active, "group.run_started", { memberCount: run.steps.length });
     return snapshot(run);
   }
 
@@ -174,6 +176,43 @@ export class InstanceGroupRunner {
       if (this.runs.get(run.groupId) === active) this.runs.delete(run.groupId);
     }, RUN_RETENTION_MS);
     active.retentionTimer.unref?.();
+
+    const base = {
+      memberCount: run.steps.length,
+      durationSec: Math.max(0, Math.round((run.finishedAt - run.startedAt) / 1000))
+    };
+    if (run.state === "failed") {
+      const failed = run.steps.find((s) => s.state === "failed");
+      this.notify(active, "group.run_failed", {
+        ...base,
+        ...(failed ? { failedStep: { key: failed.key, reason: failed.reason ?? "failure" } } : {})
+      });
+    } else {
+      this.notify(active, "group.run_finished", {
+        ...base,
+        result: run.state === "cancelled" ? "cancelled" : "succeeded"
+      });
+    }
+  }
+
+  // Synchronous and fully guarded: a notification problem can never affect a run.
+  private notify(
+    active: ActiveRun,
+    type: "group.run_started" | "group.run_finished" | "group.run_failed",
+    details: Record<string, unknown>
+  ) {
+    try {
+      const { run, group } = active;
+      emitNotification({
+        type,
+        group: { uuid: group.uuid, name: group.name, action: run.action, runId: run.runId },
+        details
+      });
+    } catch (err) {
+      try {
+        logger.warn("Instance group: notification failed:", err);
+      } catch {}
+    }
   }
 
   private async execute(active: ActiveRun, members: InstanceGroupMember[]) {

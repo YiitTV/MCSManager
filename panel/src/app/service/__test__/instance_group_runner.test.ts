@@ -17,6 +17,8 @@ import {
 // The production wiring at the bottom of the runner module imports the real
 // operation logger / remote subsystem; keep those inert for unit tests.
 vi.mock("../operation_logger", () => ({ operationLogger: { log: vi.fn() } }));
+const emitMock = vi.hoisted(() => vi.fn());
+vi.mock("../notification_service", () => ({ emitNotification: emitMock }));
 vi.mock("../remote_service", () => ({ default: { getInstance: vi.fn() } }));
 
 const OWNER = "owner1";
@@ -142,7 +144,10 @@ function expectClean(env: ReturnType<typeof makeEnv>) {
   expect(vi.getTimerCount()).toBe(1);
 }
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => {
+  emitMock.mockReset();
+  vi.useFakeTimers();
+});
 afterEach(() => vi.useRealTimers());
 
 describe("ordered start", () => {
@@ -652,5 +657,74 @@ describe("run records", () => {
       expectClean(env);
       await runner.dispose();
     }
+  });
+});
+
+describe("notifications", () => {
+  const types = () => emitMock.mock.calls.map((c) => c[0].type);
+
+  it("emits run_started on accept and run_finished(succeeded) once", async () => {
+    const env = makeEnv({ i1: { onCommand: readyAfter() } });
+    const runner = new InstanceGroupRunner(env.deps);
+    const run = runner.start(makeGroup(["i1"]), "start", OPERATOR);
+    expect(types()).toEqual(["group.run_started"]);
+    expect(emitMock.mock.calls[0][0]).toMatchObject({
+      group: { uuid: "g1", name: "net", action: "start", runId: run.runId },
+      details: { memberCount: 1 }
+    });
+    await settle(runner);
+    expect(types()).toEqual(["group.run_started", "group.run_finished"]);
+    expect(emitMock.mock.calls[1][0].details).toMatchObject({
+      result: "succeeded",
+      memberCount: 1
+    });
+    expect(typeof emitMock.mock.calls[1][0].details.durationSec).toBe("number");
+  });
+
+  it("emits run_finished with result cancelled on cancel", async () => {
+    const env = makeEnv({ i1: {} });
+    const runner = new InstanceGroupRunner(env.deps);
+    runner.start(makeGroup(["i1"]), "start", OPERATOR);
+    await runner.cancel(OWNER, "g1");
+    expect(types()).toEqual(["group.run_started", "group.run_finished"]);
+    expect(emitMock.mock.calls[1][0].details.result).toBe("cancelled");
+  });
+
+  it("emits run_failed with the failed step key and reason code", async () => {
+    const env = makeEnv({ i1: { commandError: new Error("boom") } });
+    const runner = new InstanceGroupRunner(env.deps);
+    runner.start(makeGroup(["i1"]), "start", OPERATOR);
+    await settle(runner);
+    expect(types()).toEqual(["group.run_started", "group.run_failed"]);
+    expect(emitMock.mock.calls[1][0].details.failedStep).toEqual({
+      key: memberKey("d1", "i1"),
+      reason: "command_failed"
+    });
+  });
+
+  it("emits nothing for validation rejections (409 / 429)", async () => {
+    const env = makeEnv({ i1: {} });
+    const runner = new InstanceGroupRunner(env.deps);
+    runner.start(makeGroup(["i1"]), "start", OPERATOR);
+    emitMock.mockClear();
+    expect(() => runner.start(makeGroup(["i1"]), "stop", OPERATOR)).toThrow();
+    for (let n = 1; n < MAX_ACTIVE_RUNS; n++)
+      runner.start(makeGroup(["i1"], { uuid: `x${n}` }), "start", OPERATOR);
+    emitMock.mockClear();
+    expect(() => runner.start(makeGroup(["i1"], { uuid: "x99" }), "start", OPERATOR)).toThrow();
+    expect(emitMock).not.toHaveBeenCalled();
+    await runner.dispose();
+  });
+
+  it("a throwing emitter does not change the run result", async () => {
+    emitMock.mockImplementation(() => {
+      throw new Error("emit broke");
+    });
+    const env = makeEnv({ i1: { onCommand: readyAfter() } });
+    const runner = new InstanceGroupRunner(env.deps);
+    runner.start(makeGroup(["i1"]), "start", OPERATOR);
+    const run = await settle(runner);
+    expect(run.state).toBe("succeeded");
+    expect(run.steps[0].state).toBe("done");
   });
 });
