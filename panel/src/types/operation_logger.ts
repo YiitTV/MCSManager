@@ -27,7 +27,9 @@ export enum OperationLoggerAction {
   UserApiKeyChange = "user_apikey_change",
   UserLogin = "user_login",
   SsoUnbind = "sso_unbind",
-  SystemConfigChange = "system_config_change"
+  SystemConfigChange = "system_config_change",
+  InstanceBackup = "instance_backup",
+  BackupConfigChange = "backup_config_change"
 }
 
 export type GlobalGeneralOptions = {
@@ -172,6 +174,22 @@ export type SystemConfigChangeOptions = {
   config_after?: any;
 } & GlobalGeneralOptions;
 
+// Backup operations on an instance. Never carries secrets, remote keys or URLs.
+export type InstanceBackupOptions = {
+  type: "instance_backup";
+  action: "run" | "cancel" | "restore" | "download";
+  plan_name?: string;
+  backup_id?: string;
+} & InstanceGeneralOptions;
+
+// Destination / plan configuration changes. `target_name` is the display name only.
+export type BackupConfigChangeOptions = {
+  type: "backup_config_change";
+  target: "destination" | "plan" | "gdrive_connect";
+  action: "create" | "update" | "delete" | "test" | "connect";
+  target_name?: string;
+} & GlobalGeneralOptions;
+
 export type InstanceFileRenameOptions = {
   type: "instance_file_rename";
   file_before: string;
@@ -231,7 +249,9 @@ export type OperationLoggerItem =
   | UserApiKeyChangeOptions
   | UserLoginOptions
   | SsoUnbindOptions
-  | SystemConfigChangeOptions;
+  | SystemConfigChangeOptions
+  | InstanceBackupOptions
+  | BackupConfigChangeOptions;
 
 export type OperationLoggerItemPayload = {
   [T in OperationLoggerItem["type"]]: Omit<Extract<OperationLoggerItem, { type: T }>, "type">;

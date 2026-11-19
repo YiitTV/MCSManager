@@ -9,6 +9,7 @@ import { globalConfiguration } from "./entity/config";
 import { $t, i18next } from "./i18n";
 import "./service/async_task_service";
 import "./service/async_task_service/quick_install";
+import { initBackupService } from "./service/backup/service";
 import { checkDependencies } from "./service/dependencies";
 import * as koa from "./service/http";
 import logger from "./service/log";
@@ -111,6 +112,8 @@ try {
   logger.error($t("TXT_CODE_app.instanceLoadError"), err);
   process.exit(-1);
 }
+
+initBackupService();
 
 (function initCompressModule() {
   try {

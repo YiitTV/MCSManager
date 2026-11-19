@@ -167,9 +167,7 @@ async function listLabeledContainers(uuid: string): Promise<any[]> {
   const { DefaultDocker } = await import("../../service/docker_service");
   const docker = new DefaultDocker();
   const containers = await docker.listContainers({ all: true });
-  return containers.filter(
-    (c: any) => c.Labels?.["mcsmanager.instance.uuid"] === uuid
-  );
+  return containers.filter((c: any) => c.Labels?.["mcsmanager.instance.uuid"] === uuid);
 }
 
 // Send a stdin line to a running instance through the real router and return the
@@ -724,14 +722,14 @@ describe("background mod installation", () => {
     vi.mocked(modService.installMod).mockReturnValueOnce(
       new Promise<void>((resolve) => {
         finish = resolve;
-      }),
+      })
     );
     const { socket } = invoke("instance/mods/install", {
       instanceUuid: "instance",
       url: "https://example.com/new.jar",
       fileName: "new.jar",
       type: "mod",
-      oldFileName: "old.jar",
+      oldFileName: "old.jar"
     });
     await flush();
     const packet = packetsFor(socket, "instance/mods/install")[0];
@@ -742,7 +740,7 @@ describe("background mod installation", () => {
       "https://example.com/new.jar",
       "new.jar",
       "mod",
-      { oldFileName: "old.jar", fallbackUrl: undefined },
+      { oldFileName: "old.jar", fallbackUrl: undefined }
     );
     finish();
   });
@@ -751,20 +749,18 @@ describe("background mod installation", () => {
     const { modService } = await import("../../service/mod_service");
     const logger = (await import("../../service/log")).default;
     const error = vi.spyOn(logger, "error");
-    vi.mocked(modService.installMod).mockRejectedValueOnce(
-      new Error("download failed"),
-    );
+    vi.mocked(modService.installMod).mockRejectedValueOnce(new Error("download failed"));
     const { socket } = invoke("instance/mods/install", {
       instanceUuid: "instance",
       url: "https://example.com/new.jar",
       fileName: "new.jar",
-      type: "mod",
+      type: "mod"
     });
     await flush();
     expect(packetsFor(socket, "instance/mods/install")[0].status).toBe(200);
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining("failed to install"),
-      expect.any(Error),
+      expect.any(Error)
     );
     error.mockRestore();
   });

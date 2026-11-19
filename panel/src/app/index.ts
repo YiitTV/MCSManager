@@ -2,10 +2,12 @@ import Router from "@koa/router";
 import Koa from "koa";
 
 import "./service/remote_service";
+import "./service/backup_daemon_events";
 import "./service/user_service";
 import "./service/user_statistics";
 import "./service/visual_data";
 
+import backupRouter from "./routers/backup_router";
 import serviceRouter from "./routers/daemon_router";
 import environmentRouter from "./routers/environment_router";
 import filemanager_router from "./routers/filemananger_router";
@@ -48,6 +50,8 @@ export function mountRouters(app: Koa<Koa.DefaultState, Koa.DefaultContext>) {
   apiRouter.use(instanceGroupRouter.routes()).use(instanceGroupRouter.allowedMethods());
 
   apiRouter.use(notificationRouter.routes()).use(notificationRouter.allowedMethods());
+
+  apiRouter.use(backupRouter.routes()).use(backupRouter.allowedMethods());
 
   app.use(apiRouter.routes()).use(apiRouter.allowedMethods());
 }

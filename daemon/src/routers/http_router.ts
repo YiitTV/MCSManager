@@ -5,15 +5,13 @@ import path from "path";
 import { DAEMON_INDEX_HTML } from "../const/index_html";
 import FileWriter from "../entity/file_writer";
 import { $t } from "../i18n";
+import { backupDownloadTickets } from "../service/backup/download_tickets";
 import { missionPassport } from "../service/mission_passport";
 import FileManager from "../service/system_file";
 import InstanceSubsystem from "../service/system_instance";
 import uploadManager from "../service/upload_manager";
 import { clearUploadFiles } from "../tools/filepath";
-import {
-  resolveInstanceFileOwnership,
-  syncInstancePathOwnership
-} from "../tools/file_ownership";
+import { resolveInstanceFileOwnership, syncInstancePathOwnership } from "../tools/file_ownership";
 import { sendFile } from "../utils/speed_limit";
 
 const router = new Router();
@@ -41,6 +39,21 @@ router.get("/download/:key/:fileName", async (ctx) => {
     if (!mission) throw new Error((ctx.body = "Access denied: No task found"));
     const instance = InstanceSubsystem.getInstance(mission.parameter.instanceUuid);
     if (!instance) throw new Error($t("TXT_CODE_http_router.instanceNotExist"));
+
+    // Backup archive: the passport's fileName is a daemon-issued single-use ticket that maps to
+    // one archive file. No client supplied path is used.
+    const ticketName = mission.parameter?.fileName;
+    const ticket = backupDownloadTickets.lookup(ticketName, mission.parameter.instanceUuid);
+    if (ticket.state === "expired") throw new Error((ctx.body = "Access denied: Ticket expired"));
+    if (ticket.state === "valid") {
+      const info = await fs.lstat(ticket.filePath);
+      if (!info.isFile()) throw new Error((ctx.body = "Access denied: Invalid destination"));
+      await sendFile(ctx, ticket.filePath);
+      backupDownloadTickets.consume(ticketName);
+      missionPassport.deleteMission(key, "download");
+      return;
+    }
+
     if (!FileManager.checkFileName(paramsFileName))
       throw new Error($t("TXT_CODE_http_router.fileNameNotSpec"));
 

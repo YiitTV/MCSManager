@@ -20,6 +20,7 @@ import {
   CodeOutlined,
   ControlOutlined,
   DashboardOutlined,
+  CloudUploadOutlined,
   FieldTimeOutlined,
   FolderOpenOutlined,
   UsbOutlined,
@@ -197,6 +198,20 @@ const btns = computed(() => {
       click: () => {
         toPage({
           path: "/instances/schedule",
+          query: {
+            instanceId,
+            daemonId
+          }
+        });
+      }
+    },
+    {
+      title: t("TXT_CODE_backup_ui.menuTitle"),
+      icon: CloudUploadOutlined,
+      condition: () => !isGlobalTerminal.value,
+      click: () => {
+        toPage({
+          path: "/instances/backups",
           query: {
             instanceId,
             daemonId

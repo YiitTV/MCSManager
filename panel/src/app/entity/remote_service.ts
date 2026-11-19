@@ -11,6 +11,12 @@ export default class RemoteService {
   public static readonly STATUS_OK = 200;
   public static readonly STATUS_ERR = 500;
 
+  // Extension points for features that listen to daemon pushes. `socketHooks` run right after a
+  // socket is created (once per socket, including after reconnects); `authHooks` run after each
+  // successful authentication.
+  public static readonly socketHooks: Array<(service: RemoteService, socket: Socket) => void> = [];
+  public static readonly authHooks: Array<(service: RemoteService) => void> = [];
+
   public uuid: string = "";
   public available: boolean = false;
   public socket?: Socket;
@@ -58,6 +64,14 @@ export default class RemoteService {
       path: removeTrail(this.config.prefix, "/") + "/socket.io"
     });
 
+    for (const hook of RemoteService.socketHooks) {
+      try {
+        hook(this, this.socket);
+      } catch (err: any) {
+        logger.warn(`socket hook failed: ${err?.message}`);
+      }
+    }
+
     // register built-in events
     this.socket.on("connect", async () => {
       logger.info($t("TXT_CODE_daemonInfo.connect", { v: daemonInfo }));
@@ -102,6 +116,13 @@ export default class RemoteService {
         this.available = true;
         await this.setLanguage();
         logger.info($t("TXT_CODE_daemonInfo.authSuccess", { v: daemonInfo }));
+        for (const hook of RemoteService.authHooks) {
+          try {
+            hook(this);
+          } catch (err: any) {
+            logger.warn(`auth hook failed: ${err?.message}`);
+          }
+        }
         return true;
       }
       this.available = false;

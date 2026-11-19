@@ -134,6 +134,20 @@ export type SystemConfigChangeOptions = {
   config_after?: any;
 } & GlobalGeneralOptions;
 
+export type InstanceBackupOptions = {
+  type: "instance_backup";
+  action: "run" | "cancel" | "restore" | "download";
+  plan_name?: string;
+  backup_id?: string;
+} & InstanceGeneralOptions;
+
+export type BackupConfigChangeOptions = {
+  type: "backup_config_change";
+  target: "destination" | "plan" | "gdrive_connect";
+  action: "create" | "update" | "delete" | "test" | "connect";
+  target_name?: string;
+} & GlobalGeneralOptions;
+
 export type InstanceFileDownloadFromUrlOptions = {
   type: "instance_file_download_from_url";
   url: string;
@@ -199,7 +213,9 @@ export type OperationLoggerItem =
   | UserApiKeyChangeOptions
   | UserLoginOptions
   | SsoUnbindOptions
-  | SystemConfigChangeOptions;
+  | SystemConfigChangeOptions
+  | InstanceBackupOptions
+  | BackupConfigChangeOptions;
 
 export type OperationLoggerType = OperationLoggerItem["type"];
 

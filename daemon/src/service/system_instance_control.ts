@@ -4,6 +4,7 @@ import Instance from "../entity/instance/instance";
 import { $t } from "../i18n";
 import { sleep } from "../utils/sleep";
 import logger from "./log";
+import { isValidBackupActionPayload, triggerScheduledBackup } from "./backup/scheduler_hook";
 import FileManager from "./system_file";
 import InstanceSubsystem from "./system_instance";
 
@@ -13,7 +14,8 @@ export enum ScheduleActionTypeEnum {
   Stop = "stop",
   Start = "start",
   Restart = "restart",
-  Kill = "kill"
+  Kill = "kill",
+  Backup = "backup"
 }
 
 export const ScheduleTypeEnum = {
@@ -60,7 +62,10 @@ class TaskConfig implements IScheduleTask {
 class IntervalJob implements IScheduleJob {
   public job: number = 0;
 
-  constructor(private callback: Function, public time: number) {
+  constructor(
+    private callback: Function,
+    public time: number
+  ) {
     this.job = setInterval(callback, time * 1000);
   }
 
@@ -71,7 +76,10 @@ class IntervalJob implements IScheduleJob {
 
 // Scheduled task instance class
 class Task {
-  constructor(public config: TaskConfig, public job?: IScheduleJob) {}
+  constructor(
+    public config: TaskConfig,
+    public job?: IScheduleJob
+  ) {}
 }
 
 class InstanceControlSubsystem {
@@ -114,6 +122,14 @@ class InstanceControlSubsystem {
     if (!FileManager.checkFileName(task.name))
       throw new Error($t("TXT_CODE_system_instance_control.illegalName"));
     if (task.actions?.length > 10) throw new Error($t("TXT_CODE_3e107108"));
+    for (const action of task.actions ?? []) {
+      if (
+        action?.type === ScheduleActionTypeEnum.Backup &&
+        !isValidBackupActionPayload(action.payload)
+      ) {
+        throw new Error($t("TXT_CODE_backup.invalidSchedulePayload"));
+      }
+    }
     if (needStore)
       logger.info(
         $t("TXT_CODE_system_instance_control.crateTask", {
@@ -244,6 +260,12 @@ class InstanceControlSubsystem {
         }
         if (actionType === ScheduleActionTypeEnum.Kill) {
           await instance.execPreset("kill");
+          continue;
+        }
+        if (actionType === ScheduleActionTypeEnum.Backup) {
+          // Never waits for the job: the panel owns the plan and credentials and starts it.
+          if (!isValidBackupActionPayload(payload)) throw new Error("Invalid backup plan id");
+          triggerScheduledBackup(instanceUuid, payload, undefined, instance.config.nickname);
           continue;
         }
 
