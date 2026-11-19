@@ -1,26 +1,8 @@
 import { t } from "@/lang/i18n";
-import { INSTANCE_STATUS, INSTANCE_STATUS_CODE } from "@/types/const";
 import type { GroupMemberView } from "@/types/instanceGroup";
 
 export function isMemberUnavailable(member: GroupMemberView): boolean {
   return member.available === false;
-}
-
-// Label of a member's status. Reuses the shared INSTANCE_STATUS labels.
-export function memberStatusLabel(member: GroupMemberView): string {
-  if (isMemberUnavailable(member)) return t("TXT_CODE_instance_group_ui.unavailable");
-  if (typeof member.status !== "number") return t("TXT_CODE_instance_group_ui.unknown");
-  const label = INSTANCE_STATUS[member.status as INSTANCE_STATUS_CODE];
-  return label ? t(String(label)) : t("TXT_CODE_instance_group_ui.unknown");
-}
-
-// Ant Design tag colour for a status; same mapping as the instance list (InstanceLine.vue).
-export function memberStatusColor(member: GroupMemberView): string {
-  if (isMemberUnavailable(member)) return "";
-  if (member.status === INSTANCE_STATUS_CODE.RUNNING) return "green";
-  if (member.status === INSTANCE_STATUS_CODE.STARTING) return "pink";
-  if (member.status === INSTANCE_STATUS_CODE.STOPPING) return "orange";
-  return "";
 }
 
 // Machine reason codes sent by the panel for skipped and failed run steps

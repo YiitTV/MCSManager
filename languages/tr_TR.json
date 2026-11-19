@@ -3511,7 +3511,7 @@
   "TXT_CODE_instance_group_ui.title": "Sunucu grupları",
   "TXT_CODE_instance_group_ui.help": "Birden fazla sunucuyu belirlediğiniz sırayla başlatın ve durdurun. Gruplar yalnızca size özeldir. Çalışma sırasında panel yeniden başlarsa sıra devam etmez; başlamış sunucular çalışmaya devam eder.",
   "TXT_CODE_instance_group_ui.refresh": "Yenile",
-  "TXT_CODE_instance_group_ui.create": "Yeni grup",
+  "TXT_CODE_instance_group_ui.create": "Grup oluştur",
   "TXT_CODE_instance_group_ui.empty": "Henüz sunucu grubunuz yok.",
   "TXT_CODE_instance_group_ui.start": "Grubu başlat",
   "TXT_CODE_instance_group_ui.stop": "Grubu durdur",
@@ -3524,7 +3524,7 @@
   "TXT_CODE_instance_group_ui.orderHint": "Başlatma sırası / durdurma sırasındaki konum",
   "TXT_CODE_instance_group_ui.unavailable": "Kullanılamıyor",
   "TXT_CODE_instance_group_ui.unknown": "Bilinmiyor",
-  "TXT_CODE_instance_group_ui.openConsole": "Konsol",
+  "TXT_CODE_instance_group_ui.openConsole": "Mini konsol",
   "TXT_CODE_instance_group_ui.runStart": "Grup başlatılıyor",
   "TXT_CODE_instance_group_ui.runStop": "Grup durduruluyor",
   "TXT_CODE_instance_group_ui.runRunning": "Devam ediyor",
@@ -3746,5 +3746,8 @@
   "TXT_CODE_notification_ui.err_http_4xx": "Hedef isteği reddetti (HTTP 4xx). URL ve anahtarı kontrol edin.",
   "TXT_CODE_notification_ui.err_http_5xx": "Hedef sunucu hatası bildirdi (HTTP 5xx).",
   "TXT_CODE_notification_ui.err_network": "Hedefe bağlanırken ağ hatası oluştu.",
-  "TXT_CODE_notification_ui.err_unknown": "Gönderim bilinmeyen bir nedenle başarısız oldu."
+  "TXT_CODE_notification_ui.err_unknown": "Gönderim bilinmeyen bir nedenle başarısız oldu.",
+  "TXT_CODE_instance_group_ui.viewNormal": "Normal",
+  "TXT_CODE_instance_group_ui.viewGrouped": "Gruplu",
+  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış"
 }

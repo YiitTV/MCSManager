@@ -34,13 +34,18 @@ import {
 import { message, Modal } from "ant-design-vue";
 import _ from "lodash";
 import prettyBytes, { type Options as PrettyOptions } from "pretty-bytes";
-import { computed, ref } from "vue";
+import { computed, toRef } from "vue";
 
-const props = defineProps<{
-  card: LayoutCard;
-  targetInstanceInfo?: InstanceDetail;
-  targetDaemonId?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    card: LayoutCard;
+    targetInstanceInfo?: InstanceDetail;
+    targetDaemonId?: string;
+    hideManagementActions?: boolean;
+    fullHeight?: boolean;
+  }>(),
+  { fullHeight: true }
+);
 
 const emits = defineEmits(["refreshList"]);
 
@@ -55,7 +60,7 @@ const { statusText, isRunning, isStopped, instanceTypeText, instanceInfo, isStar
     instanceId: props.targetInstanceInfo ? undefined : instanceId,
     daemonId: props.targetInstanceInfo ? undefined : daemonId,
     autoRefresh: props.targetInstanceInfo ? false : true,
-    instanceInfo: props.targetInstanceInfo ? ref(props.targetInstanceInfo) : undefined
+    instanceInfo: props.targetInstanceInfo ? toRef(props, "targetInstanceInfo") : undefined
   });
 
 const operationConfig = {
@@ -233,7 +238,7 @@ const instanceOperations = computed(() =>
     {
       title: t("TXT_CODE_78e88c3f"),
       icon: TagsOutlined,
-      click: async (event: MouseEvent) => {
+      click: async (event: MouseEvent): Promise<void> => {
         event.stopPropagation();
         if (instanceId && daemonId) {
           const tags = instanceInfo.value?.config.tag || [];
@@ -241,7 +246,8 @@ const instanceOperations = computed(() =>
           if (!_.isEqual(newTags, tags)) refreshList();
         }
       },
-      disabled: containerState.isDesignMode
+      disabled: containerState.isDesignMode,
+      condition: () => !props.hideManagementActions
     },
     {
       title: t("TXT_CODE_524e3036"),
@@ -272,14 +278,15 @@ const instanceOperations = computed(() =>
         refreshList();
       },
       danger: true,
-      disabled: containerState.isDesignMode
+      disabled: containerState.isDesignMode,
+      condition: () => !props.hideManagementActions
     }
   ])
 );
 </script>
 
 <template>
-  <CardPanel style="width: 100%; height: 100%; position: relative">
+  <CardPanel :full-height="fullHeight" style="width: 100%; position: relative">
     <template #title>
       {{ instanceInfo?.config.nickname }}
     </template>
@@ -382,7 +389,7 @@ const instanceOperations = computed(() =>
           </div>
         </a-typography-paragraph>
 
-        <a-space warp :size="6" class="mb-4">
+        <a-space :wrap="Boolean($slots['extra-actions'])" :size="6" class="mb-4">
           <div v-for="item in instanceOperations" :key="item.title">
             <a-divider v-if="item.area" type="vertical" />
             <a-tooltip v-else :title="item.title">
@@ -397,6 +404,7 @@ const instanceOperations = computed(() =>
               </a-button>
             </a-tooltip>
           </div>
+          <slot name="extra-actions" />
         </a-space>
       </div>
     </template>
