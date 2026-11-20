@@ -3749,5 +3749,21 @@
   "TXT_CODE_notification_ui.err_http_4xx": "The target rejected the request (HTTP 4xx). Check the URL and secret.",
   "TXT_CODE_notification_ui.err_http_5xx": "The target reported a server error (HTTP 5xx).",
   "TXT_CODE_notification_ui.err_network": "A network error occurred while contacting the target.",
-  "TXT_CODE_notification_ui.err_unknown": "Delivery failed for an unknown reason."
+  "TXT_CODE_notification_ui.err_unknown": "Delivery failed for an unknown reason.",
+  "TXT_CODE_instance_group.invalidRestartWarning": "Invalid restart warning settings.",
+  "TXT_CODE_instance_group.emptyRestart": "Add at least one server before restarting the group.",
+  "TXT_CODE_instance_group_ui.warnedRestart": "Restart with warnings",
+  "TXT_CODE_instance_group_ui.countdown": "Restart in {seconds}s",
+  "TXT_CODE_instance_group_ui.warningOffsets": "Warning times (seconds before restart)",
+  "TXT_CODE_instance_group_ui.warningOffsetsHelp": "Enter 1 to 10 different whole numbers between 1 and 3600, separated by commas.",
+  "TXT_CODE_instance_group_ui.warningMessage": "Warning message",
+  "TXT_CODE_instance_group_ui.warningMessageHelp": "Enter up to 200 characters. Use {token} for the remaining seconds.",
+  "TXT_CODE_console_shortcuts.edit": "Edit shortcuts",
+  "TXT_CODE_console_shortcuts.add": "Add shortcut",
+  "TXT_CODE_console_shortcuts.name": "Shortcut name",
+  "TXT_CODE_console_shortcuts.command": "Command",
+  "TXT_CODE_console_shortcuts.remove": "Remove",
+  "TXT_CODE_console_shortcuts.invalid": "Invalid console shortcut request.",
+  "TXT_CODE_console_shortcuts.notFound": "This shortcut no longer exists.",
+  "TXT_CODE_console_shortcuts.failed": "The console shortcut request failed."
 }

@@ -475,6 +475,46 @@ describe("General (non-Docker) instance lifecycle (real)", () => {
   }, 60000);
 });
 
+describe("guarded instance commands", () => {
+  it("reports the server type and dispatches only to a matching running instance", async () => {
+    const type = "minecraft/java/paper";
+    const cfg = { ...generalConfig("guarded-command"), type };
+    const { inst, uuid } = createInstance(cfg);
+    const status = vi.spyOn(inst, "status");
+    const exec = vi.spyOn(inst, "execPreset").mockResolvedValue(undefined);
+    try {
+      const batchEvent = "instance/status_batch";
+      const { socket } = dispatch(batchEvent, { instanceUuids: [uuid], includeType: true });
+      expect(packetsFor(socket, batchEvent)[0].data.instances).toEqual([
+        { instanceUuid: uuid, nickname: cfg.nickname, status: Instance.STATUS_STOP, type }
+      ]);
+
+      const commandEvent = "instance/command";
+      const send = (expectedType: string) =>
+        dispatch(commandEvent, {
+          instanceUuid: uuid,
+          command: "save-all",
+          expectedType,
+          requireRunning: true
+        }).socket;
+      const stopped = send(type);
+      expect(packetsFor(stopped, commandEvent)[0].status).toBe(500);
+      status.mockReturnValue(Instance.STATUS_RUNNING);
+      const wrongType = send("minecraft/java/purpur");
+      expect(packetsFor(wrongType, commandEvent)[0].status).toBe(500);
+      expect(exec).not.toHaveBeenCalled();
+
+      const running = send(type);
+      await flush();
+      expect(packetsFor(running, commandEvent)[0].status).toBe(200);
+      expect(exec).toHaveBeenCalledWith("command", "save-all");
+    } finally {
+      status.mockRestore();
+      exec.mockRestore();
+    }
+  });
+});
+
 describe("General process instance interactive lifecycle (real)", () => {
   // Real non-Docker instances running the interactive fixture `test.mjs`
   // (`node test.mjs`, pipes, no PTY, no shell wrapper). The fixture speaks a

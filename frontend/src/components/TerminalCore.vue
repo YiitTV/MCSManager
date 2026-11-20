@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import ConsoleShortcuts from "@/components/ConsoleShortcuts.vue";
 import connectErrorImage from "@/assets/daemon_connection_error.png";
+import { GLOBAL_INSTANCE_UUID } from "@/config/const";
 import { useCommandHistory } from "@/hooks/useCommandHistory";
 import { useXhrPollError } from "@/hooks/useXhrPollError";
 import { t } from "@/lang/i18n";
@@ -34,6 +36,7 @@ const {
   state,
   events,
   isConnect,
+  isRunning,
   socketAddress,
   execute: setUpTerminal,
   initTerminalWindow,
@@ -155,6 +158,12 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    <ConsoleShortcuts
+      v-if="!containerState.isDesignMode && instanceId !== GLOBAL_INSTANCE_UUID"
+      :daemon-id="daemonId"
+      :instance-id="instanceId"
+      :disabled="!isConnect || !isRunning"
+    />
     <div class="command-input">
       <div v-show="focusHistoryList" class="history">
         <li v-for="(item, key) in history" :key="item">

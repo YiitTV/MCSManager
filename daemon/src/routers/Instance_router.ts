@@ -186,14 +186,15 @@ routerApp.on("instance/detail", async (ctx, data) => {
 });
 
 // Cheap read-only batch status query (used by panel instance groups).
-// Returns uuid, nickname and status only; unknown uuids are omitted.
+// Returns lightweight metadata for known instances only.
 const STATUS_BATCH_MAX = 30;
 routerApp.on("instance/status_batch", (ctx, data) => {
   try {
     const uuids = data?.instanceUuids;
     if (!Array.isArray(uuids) || uuids.length > STATUS_BATCH_MAX)
       throw new Error(`instanceUuids must be an array of at most ${STATUS_BATCH_MAX} items`);
-    const instances: { instanceUuid: string; nickname: string; status: number }[] = [];
+    const instances: { instanceUuid: string; nickname: string; status: number; type?: string }[] =
+      [];
     for (const instanceUuid of uuids) {
       if (typeof instanceUuid !== "string") throw new Error("instanceUuids must contain strings");
       const instance = InstanceSubsystem.getInstance(instanceUuid);
@@ -201,7 +202,8 @@ routerApp.on("instance/status_batch", (ctx, data) => {
       instances.push({
         instanceUuid: instance.instanceUuid,
         nickname: instance.config.nickname,
-        status: instance.status()
+        status: instance.status(),
+        ...(data.includeType === true ? { type: instance.config.type } : {})
       });
     }
     protocol.msg(ctx, "instance/status_batch", { instances });
@@ -381,6 +383,10 @@ routerApp.on("instance/command", async (ctx, data) => {
   const instance = InstanceSubsystem.getInstance(instanceUuid);
   try {
     if (!instance) throw new Error($t("TXT_CODE_3bfb9e04"));
+    if (data.requireRunning === true && instance.status() !== Instance.STATUS_RUNNING)
+      throw new Error($t("TXT_CODE_command.instanceNotOpen"));
+    if (data.expectedType !== undefined && data.expectedType !== instance.config.type)
+      throw new Error("Instance type changed before command dispatch");
     await instance.execPreset("command", command);
     if (!disableResponse) protocol.msg(ctx, "instance/command", { instanceUuid });
   } catch (err: any) {

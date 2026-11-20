@@ -60,6 +60,14 @@ export const stopInstanceGroup = useDefineApi<
   method: "POST"
 });
 
+export const restartInstanceGroupWithWarnings = useDefineApi<
+  { params: { id: string } },
+  { runId: string }
+>({
+  url: "/api/instance_group/warned-restart",
+  method: "POST"
+});
+
 export const cancelInstanceGroupRun = useDefineApi<
   {
     params: { id: string };

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   canvas: vi.fn()
 }));
 
+vi.mock("@/components/ConsoleShortcuts.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("@/lang/i18n", () => ({ t: (key: string) => key, $t: (key: string) => key }));
 vi.mock("@/config/const", () => ({ GLOBAL_INSTANCE_NAME: "__global__" }));
 vi.mock("@/hooks/useCommandHistory", () => ({

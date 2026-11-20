@@ -35,6 +35,18 @@ export interface InstanceGroupMember {
   instanceUuid: string;
 }
 
+export interface RestartWarning {
+  offsetsSec: number[];
+  message: string;
+}
+
+export function defaultRestartWarning(): RestartWarning {
+  return {
+    offsetsSec: [300, 60, 10],
+    message: "Sunucu {seconds} saniye içinde yeniden başlatılıyor"
+  };
+}
+
 export interface InstanceGroupAdvance {
   mode: AdvanceMode;
   pattern: string;
@@ -53,6 +65,7 @@ export class InstanceGroup {
   // "<daemonId>::<instanceUuid>" keys, a permutation of members
   stopOrder: string[] = [];
   advance: InstanceGroupAdvance = defaultAdvance();
+  restartWarning: RestartWarning = defaultRestartWarning();
   createdAt = 0;
   updatedAt = 0;
 }
@@ -81,13 +94,15 @@ export const INSTANCE_STATUS = {
 } as const;
 
 // Run state (in memory only)
-export type RunAction = "start" | "stop";
+export type LifecycleAction = "start" | "stop";
+export type RunAction = LifecycleAction | "warned-restart";
 export type RunState = "running" | "succeeded" | "failed" | "cancelled";
 export type StepState = "pending" | "waiting" | "done" | "skipped" | "failed";
 
 export interface RunStep {
   key: string;
   state: StepState;
+  action?: LifecycleAction;
   reason?: string;
 }
 
@@ -100,4 +115,5 @@ export interface InstanceGroupRun {
   steps: RunStep[];
   startedAt: number;
   finishedAt?: number;
+  countdownEndsAt?: number;
 }

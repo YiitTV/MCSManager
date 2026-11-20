@@ -49,6 +49,7 @@ vi.mock("@/services/apis/instanceGroup", () => ({
   getInstanceGroupRun: vi.fn(),
   startInstanceGroup: vi.fn(),
   stopInstanceGroup: vi.fn(),
+  restartInstanceGroupWithWarnings: vi.fn(),
   updateInstanceGroup: vi.fn()
 }));
 

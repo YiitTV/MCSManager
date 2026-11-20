@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ConsoleShortcuts from "@/components/ConsoleShortcuts.vue";
 import {
   MINI_CONSOLE_HEIGHT,
   MINI_CONSOLE_SCROLLBACK,
@@ -30,6 +31,7 @@ const {
   state,
   events,
   isConnect,
+  isRunning,
   isStopped,
   execute,
   initTerminalWindow,
@@ -181,6 +183,11 @@ const onDragEnd = (e: PointerEvent) => {
           {{ t("TXT_CODE_mini_console.connecting") }}
         </div>
       </div>
+      <ConsoleShortcuts
+        :daemon-id="win.daemonId"
+        :instance-id="win.instanceUuid"
+        :disabled="!isConnect || !isRunning"
+      />
       <a-input
         v-model:value="command"
         size="small"

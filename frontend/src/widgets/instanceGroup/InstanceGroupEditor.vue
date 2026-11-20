@@ -302,6 +302,19 @@ const memberName = (m: EditorMember) =>
         </a-col>
       </a-row>
 
+      <a-divider />
+      <a-form-item
+        :label="t('TXT_CODE_instance_group_ui.warningOffsets')"
+        :extra="t('TXT_CODE_instance_group_ui.warningOffsetsHelp')"
+      >
+        <a-input v-model:value="form.warningOffsets" :maxlength="60" />
+      </a-form-item>
+      <a-form-item
+        :label="t('TXT_CODE_instance_group_ui.warningMessage')"
+        :extra="t('TXT_CODE_instance_group_ui.warningMessageHelp', { token: '{seconds}' })"
+      >
+        <a-input v-model:value="form.warningMessage" :maxlength="200" />
+      </a-form-item>
       <a-alert
         v-if="saveError"
         type="error"

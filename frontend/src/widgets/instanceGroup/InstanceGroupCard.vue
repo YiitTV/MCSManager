@@ -13,7 +13,8 @@ import {
   DeleteOutlined,
   EditOutlined,
   PlayCircleOutlined,
-  PoweroffOutlined
+  PoweroffOutlined,
+  ReloadOutlined
 } from "@ant-design/icons-vue";
 import { computed } from "vue";
 import { stepReasonLabel } from "./status";
@@ -28,6 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   start: [];
   stop: [];
+  warnedRestart: [];
   cancel: [];
   edit: [];
   remove: [];
@@ -39,7 +41,19 @@ defineSlots<{
   member(props: { member: GroupMemberView }): unknown;
 }>();
 
-const steps = computed(() => new Map(props.run?.steps.map((step) => [step.key, step])));
+const steps = computed(() => {
+  const visible = new Map<string, GroupRunStep>();
+  for (const step of props.run?.steps ?? []) {
+    if (step.state !== "pending" || !visible.has(step.key)) visible.set(step.key, step);
+  }
+  return visible;
+});
+const countdownSeconds = computed(() => {
+  const deadline = props.run?.countdownEndsAt;
+  return deadline === undefined
+    ? undefined
+    : Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+});
 const rows = computed(() =>
   props.group.members.map((member) => {
     const key = memberKey(member);
@@ -55,11 +69,16 @@ const percent = computed(() =>
   totalSteps.value ? Math.round((finishedSteps.value / totalSteps.value) * 100) : 0
 );
 
-const runTitle = computed(() =>
-  props.run?.action === "stop"
-    ? t("TXT_CODE_instance_group_ui.runStop")
-    : t("TXT_CODE_instance_group_ui.runStart")
-);
+const runTitle = computed(() => {
+  switch (props.run?.action) {
+    case "stop":
+      return t("TXT_CODE_instance_group_ui.runStop");
+    case "warned-restart":
+      return t("TXT_CODE_instance_group_ui.warnedRestart");
+    default:
+      return t("TXT_CODE_instance_group_ui.runStart");
+  }
+});
 
 const runStateText = computed(() => {
   switch (props.run?.state) {
@@ -163,6 +182,14 @@ const stepColor = (step: GroupRunStep | undefined) => {
           {{ t("TXT_CODE_instance_group_ui.stop") }}
         </a-button>
         <a-button
+          data-test="btn-warned-restart"
+          :disabled="active || pending || group.members.length === 0"
+          @click="emit('warnedRestart')"
+        >
+          <template #icon><ReloadOutlined /></template>
+          {{ t("TXT_CODE_instance_group_ui.warnedRestart") }}
+        </a-button>
+        <a-button
           v-if="active"
           danger
           data-test="btn-cancel"
@@ -200,7 +227,10 @@ const stepColor = (step: GroupRunStep | undefined) => {
       <div class="run-banner-line">
         <strong>{{ runTitle }}</strong>
         <a-tag :color="runStateColor" class="run-state">{{ runStateText }}</a-tag>
-        <span class="run-steps">{{ finishedSteps }} / {{ totalSteps }}</span>
+        <span v-if="countdownSeconds !== undefined">
+          {{ t("TXT_CODE_instance_group_ui.countdown", { seconds: countdownSeconds }) }}
+        </span>
+        <span v-else class="run-steps">{{ finishedSteps }} / {{ totalSteps }}</span>
       </div>
       <a-progress
         :percent="percent"

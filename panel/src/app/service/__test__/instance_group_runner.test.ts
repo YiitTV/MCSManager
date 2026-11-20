@@ -93,6 +93,8 @@ function makeEnv(specs: Record<string, MemberSpec>) {
       spec.onCommand?.(event, byInstance.get(instanceUuid)!);
       return { nickname: `nick-${instanceUuid}` };
     },
+    getRestartTargets: async () => new Map(),
+    sendRestartCommand: async () => {},
     logOperation: (action, info) => operations.push({ action, ...info }),
     now: () => Date.now()
   };
@@ -726,5 +728,112 @@ describe("notifications", () => {
     const run = await settle(runner);
     expect(run.state).toBe("succeeded");
     expect(run.steps[0].state).toBe("done");
+  });
+});
+
+describe("warned restart", () => {
+  it("warns running Paper and Purpur at the configured offsets, saves, then runs both orders", async () => {
+    const env = makeEnv({ lobby: {}, main: {}, proxy: {}, offline: {} });
+    const types = new Map([
+      ["lobby", "minecraft/java/paper"],
+      ["main", "minecraft/java/purpur"],
+      ["proxy", "minecraft/java/velocity"],
+      ["offline", "minecraft/java/paper"]
+    ]);
+    env.deps.getRestartTargets = async (_daemon, ids) =>
+      new Map(
+        ids.map((id) => [id, { type: types.get(id)!, status: id === "offline" ? STOP : RUNNING }])
+      );
+    const commands: string[] = [];
+    env.deps.sendRestartCommand = async (member, _type, command) => {
+      commands.push(`${member.instanceUuid}: ${command}`);
+      env.log.push(command);
+    };
+    env.deps.openStream = async (_daemon, id) => {
+      const stopped = env.log.includes(`stop:${id}`) || id === "offline";
+      const stream = new FakeStream(stopped ? STOP : RUNNING);
+      env.byInstance.set(id, stream);
+      env.streams.push(stream);
+      return stream;
+    };
+    const sendCommand = env.deps.sendCommand;
+    env.deps.sendCommand = async (daemon, event, id) => {
+      const info = await sendCommand(daemon, event, id);
+      env.byInstance.get(id)!.emit(event === "instance/open" ? "opened" : "stopped");
+      return info;
+    };
+    const runner = new InstanceGroupRunner(env.deps);
+    const group = makeGroup(["lobby", "main", "proxy", "offline"], {
+      stopOrder: ["proxy", "main", "lobby", "offline"].map((id) => memberKey("d1", id)),
+      advance: { ...defaultAdvance(), mode: "running" }
+    });
+    const run = runner.start(group, "warned-restart", OPERATOR);
+    expect(run.countdownEndsAt).toBe(run.startedAt + 300000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(239999);
+    expect(commands).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(commands).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(50000);
+    expect(commands).toHaveLength(6);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect((await settle(runner)).state).toBe("succeeded");
+    expect(commands).toEqual([
+      ...[300, 60, 10].flatMap((n) =>
+        ["lobby", "main"].map((id) => `${id}: say Sunucu ${n} saniye içinde yeniden başlatılıyor`)
+      ),
+      "lobby: save-all",
+      "main: save-all"
+    ]);
+    expect(env.log.slice(6)).toEqual([
+      "save-all",
+      "save-all",
+      "stop:proxy",
+      "stop:main",
+      "stop:lobby",
+      "start:lobby",
+      "start:main",
+      "start:proxy",
+      "start:offline"
+    ]);
+    expectClean(env);
+    await runner.dispose();
+  });
+
+  it("frees the countdown timer on cancel and dispatches no later commands", async () => {
+    const env = makeEnv({ lobby: {} });
+    env.deps.getRestartTargets = async () =>
+      new Map([["lobby", { type: "minecraft/java/paper", status: RUNNING }]]);
+    const send = vi.fn(async () => {});
+    env.deps.sendRestartCommand = send;
+    const runner = new InstanceGroupRunner(env.deps);
+    runner.start(makeGroup(["lobby"]), "warned-restart", OPERATOR);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await runner.cancel(OWNER, "g1")).state).toBe("cancelled");
+    expectClean(env);
+    await vi.advanceTimersByTimeAsync(300000);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(env.log).toEqual([]);
+    await runner.dispose();
+  });
+
+  it("checks assignment again after the status lookup", async () => {
+    const env = makeEnv({ lobby: {} });
+    env.deps.getRestartTargets = async () => {
+      env.allowed.delete("lobby");
+      return new Map([["lobby", { type: "minecraft/java/paper", status: RUNNING }]]);
+    };
+    const send = vi.fn(async () => {});
+    env.deps.sendRestartCommand = send;
+    const runner = new InstanceGroupRunner(env.deps);
+    runner.start(makeGroup(["lobby"]), "warned-restart", OPERATOR);
+    const run = await settle(runner);
+    expect(run.state).toBe("failed");
+    expect(run.steps[0].reason).toBe("not_permitted");
+    expect(send).not.toHaveBeenCalled();
+    expect(env.log).toEqual([]);
+    await runner.dispose();
   });
 });

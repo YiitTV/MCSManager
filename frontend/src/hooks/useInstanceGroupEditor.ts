@@ -1,6 +1,7 @@
 import { t } from "@/lang/i18n";
 import {
   DEFAULT_GROUP_ADVANCE,
+  DEFAULT_RESTART_WARNING,
   GROUP_LIMITS,
   memberKey,
   type GroupAdvance,
@@ -41,7 +42,9 @@ export function useInstanceGroupEditor() {
     members: [] as EditorMember[],
     // Stop order as "<daemonId>::<instanceUuid>" keys, always a permutation of the members.
     stopOrder: [] as string[],
-    advance: { ...DEFAULT_GROUP_ADVANCE } as GroupAdvance
+    advance: { ...DEFAULT_GROUP_ADVANCE } as GroupAdvance,
+    warningOffsets: "",
+    warningMessage: ""
   });
 
   const reset = (group?: InstanceGroupView) => {
@@ -60,6 +63,9 @@ export function useInstanceGroupEditor() {
       if (!form.stopOrder.includes(memberKey(m))) form.stopOrder.push(memberKey(m));
     }
     form.advance = { ...DEFAULT_GROUP_ADVANCE, ...(group?.advance ?? {}) };
+    const warning = group?.restartWarning ?? DEFAULT_RESTART_WARNING;
+    form.warningOffsets = warning.offsetsSec.join(", ");
+    form.warningMessage = warning.message;
   };
 
   const memberByKey = (key: string) => form.members.find((m) => memberKey(m) === key);
@@ -110,6 +116,10 @@ export function useInstanceGroupEditor() {
   const moveStop = (key: string, delta: -1 | 1) =>
     moveItem(form.stopOrder, form.stopOrder.indexOf(key), delta);
 
+  const warningOffsets = computed(() =>
+    form.warningOffsets.split(",").map((part) => (/^\d+$/.test(part.trim()) ? Number(part) : NaN))
+  );
+
   const errors = computed<string[]>(() => {
     const list: string[] = [];
     const name = form.name.trim();
@@ -153,6 +163,19 @@ export function useInstanceGroupEditor() {
     if (adv.mode === "delay" && startOk && adv.startTimeoutSec < adv.delaySec)
       list.push(t("TXT_CODE_instance_group_ui.errDelayExceedsTimeout"));
 
+    const offsets = warningOffsets.value;
+    if (
+      offsets.length > 10 ||
+      offsets.some((n) => !inRange(n, 1, 3600)) ||
+      new Set(offsets).size !== offsets.length
+    )
+      list.push(t("TXT_CODE_instance_group_ui.warningOffsetsHelp"));
+    if (
+      !form.warningMessage.trim() ||
+      form.warningMessage.length > 200 ||
+      /[;&|<>`$\\]/.test(form.warningMessage)
+    )
+      list.push(t("TXT_CODE_instance_group_ui.warningMessageHelp", { token: "{seconds}" }));
     return list;
   });
 
@@ -167,7 +190,8 @@ export function useInstanceGroupEditor() {
       name: form.name.trim(),
       members: form.members.map((m) => ({ daemonId: m.daemonId, instanceUuid: m.instanceUuid })),
       stopOrder: [...form.stopOrder],
-      advance
+      advance,
+      restartWarning: { offsetsSec: warningOffsets.value, message: form.warningMessage.trim() }
     };
   };
 

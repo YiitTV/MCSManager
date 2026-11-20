@@ -3749,5 +3749,21 @@
   "TXT_CODE_notification_ui.err_http_4xx": "目标拒绝了请求（HTTP 4xx），请检查 URL 和密钥。",
   "TXT_CODE_notification_ui.err_http_5xx": "目标返回服务器错误（HTTP 5xx）。",
   "TXT_CODE_notification_ui.err_network": "连接目标时发生网络错误。",
-  "TXT_CODE_notification_ui.err_unknown": "发送失败，原因未知。"
+  "TXT_CODE_notification_ui.err_unknown": "发送失败，原因未知。",
+  "TXT_CODE_instance_group.invalidRestartWarning": "重启预告设置无效。",
+  "TXT_CODE_instance_group.emptyRestart": "重启分组前请至少添加一台服务器。",
+  "TXT_CODE_instance_group_ui.warnedRestart": "预告重启",
+  "TXT_CODE_instance_group_ui.countdown": "{seconds} 秒后重启",
+  "TXT_CODE_instance_group_ui.warningOffsets": "预告时间（重启前的秒数）",
+  "TXT_CODE_instance_group_ui.warningOffsetsHelp": "请输入 1 至 10 个互不相同的整数（1 至 3600），用逗号分隔。",
+  "TXT_CODE_instance_group_ui.warningMessage": "预告消息",
+  "TXT_CODE_instance_group_ui.warningMessageHelp": "最多输入 200 个字符，用 {token} 表示剩余秒数。",
+  "TXT_CODE_console_shortcuts.edit": "编辑快捷命令",
+  "TXT_CODE_console_shortcuts.add": "添加快捷命令",
+  "TXT_CODE_console_shortcuts.name": "快捷命令名称",
+  "TXT_CODE_console_shortcuts.command": "命令",
+  "TXT_CODE_console_shortcuts.remove": "移除",
+  "TXT_CODE_console_shortcuts.invalid": "控制台快捷命令请求无效。",
+  "TXT_CODE_console_shortcuts.notFound": "此快捷命令已不存在。",
+  "TXT_CODE_console_shortcuts.failed": "控制台快捷命令请求失败。"
 }

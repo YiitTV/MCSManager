@@ -4,6 +4,7 @@ import {
   deleteInstanceGroup,
   getInstanceGroupRun,
   listInstanceGroups,
+  restartInstanceGroupWithWarnings,
   startInstanceGroup,
   stopInstanceGroup,
   updateInstanceGroup
@@ -165,6 +166,9 @@ export function useInstanceGroups(options: UseInstanceGroupsOptions = {}) {
   const startGroup = (groupId: string) => beginRun(startInstanceGroup, groupId);
   const stopGroup = (groupId: string) => beginRun(stopInstanceGroup, groupId);
 
+  const restartGroupWithWarnings = (groupId: string) =>
+    beginRun(restartInstanceGroupWithWarnings, groupId);
+
   const cancelGroup = async (groupId: string) => {
     const state = await cancelInstanceGroupRun().execute({
       params: { id: groupId },
@@ -194,6 +198,7 @@ export function useInstanceGroups(options: UseInstanceGroupsOptions = {}) {
     removeGroup,
     startGroup,
     stopGroup,
+    restartGroupWithWarnings,
     cancelGroup
   };
 }

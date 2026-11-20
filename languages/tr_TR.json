@@ -3749,5 +3749,21 @@
   "TXT_CODE_notification_ui.err_unknown": "Gönderim bilinmeyen bir nedenle başarısız oldu.",
   "TXT_CODE_instance_group_ui.viewNormal": "Normal",
   "TXT_CODE_instance_group_ui.viewGrouped": "Gruplu",
-  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış"
+  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış",
+  "TXT_CODE_instance_group.invalidRestartWarning": "Yeniden başlatma uyarısı ayarları geçersiz.",
+  "TXT_CODE_instance_group.emptyRestart": "Grubu yeniden başlatmadan önce en az bir sunucu ekleyin.",
+  "TXT_CODE_instance_group_ui.warnedRestart": "Uyarılı yeniden başlat",
+  "TXT_CODE_instance_group_ui.countdown": "Yeniden başlatmaya {seconds} sn",
+  "TXT_CODE_instance_group_ui.warningOffsets": "Uyarı zamanları (yeniden başlatmadan önceki saniye)",
+  "TXT_CODE_instance_group_ui.warningOffsetsHelp": "Virgülle ayırarak 1 ile 3600 arasında 1 ila 10 farklı tam sayı girin.",
+  "TXT_CODE_instance_group_ui.warningMessage": "Uyarı mesajı",
+  "TXT_CODE_instance_group_ui.warningMessageHelp": "En fazla 200 karakter girin. Kalan saniye için {token} kullanın.",
+  "TXT_CODE_console_shortcuts.edit": "Kısayolları düzenle",
+  "TXT_CODE_console_shortcuts.add": "Kısayol ekle",
+  "TXT_CODE_console_shortcuts.name": "Kısayol adı",
+  "TXT_CODE_console_shortcuts.command": "Komut",
+  "TXT_CODE_console_shortcuts.remove": "Kaldır",
+  "TXT_CODE_console_shortcuts.invalid": "Konsol kısayolu isteği geçersiz.",
+  "TXT_CODE_console_shortcuts.notFound": "Bu kısayol artık yok.",
+  "TXT_CODE_console_shortcuts.failed": "Konsol kısayolu isteği başarısız oldu."
 }

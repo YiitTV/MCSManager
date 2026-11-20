@@ -5,7 +5,8 @@ import {
   InstanceGroupService,
   InstanceGroupStore,
   MemberStatusResolver,
-  buildGroupViews
+  buildGroupViews,
+  validateRestartWarning
 } from "../instance_group_service";
 
 class StubStorage implements InstanceGroupStore {
@@ -388,5 +389,37 @@ describe("member authorisation and list view", () => {
     expect(view.members.map((x) => x.status)).toEqual(["unknown", "unknown"]);
     expect(view.members.every((x) => x.available)).toBe(true);
     expect(memberKey("d1", "i1")).toBe("d1::i1");
+  });
+});
+
+describe("restart warning settings", () => {
+  it("migrates old records and persists cleaned settings", async () => {
+    const { service, storage } = makeService();
+    const group = await service.create(USER_A, { name: "Network" });
+    delete storage.data.get(group.uuid).restartWarning;
+    const reloaded = makeService(storage).service;
+    await reloaded.initialize();
+    expect(reloaded.get(USER_A, group.uuid).restartWarning.offsetsSec).toEqual([300, 60, 10]);
+    const updated = await reloaded.update(USER_A, group.uuid, {
+      restartWarning: { offsetsSec: [10, 80], message: "Restart\nsoon {seconds}\u2028" }
+    });
+    expect(updated.restartWarning).toEqual({
+      offsetsSec: [80, 10],
+      message: "Restart soon {seconds}"
+    });
+    expect(storage.data.get(group.uuid).restartWarning).toEqual(updated.restartWarning);
+  });
+
+  it.each([[[]], [[0]], [[3601]], [[10, 10]], [[1.5]], [["10"]]])(
+    "rejects invalid offsets %j",
+    (offsets) => {
+      expect(() => validateRestartWarning({ offsetsSec: offsets })).toThrow();
+    }
+  );
+
+  it("rejects empty and oversized warning text", () => {
+    expect(() => validateRestartWarning({ message: "\r\n" })).toThrow();
+    expect(() => validateRestartWarning({ message: "x".repeat(201) })).toThrow();
+    expect(() => validateRestartWarning({ message: "say test; stop" })).toThrow();
   });
 });

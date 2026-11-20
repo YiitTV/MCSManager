@@ -59,7 +59,7 @@ function pickInput(body: unknown): InstanceGroupInput {
   if (!isPlainObject(body))
     throw new InstanceGroupError(400, $t("TXT_CODE_instance_group.invalidBody"));
   const input: InstanceGroupInput = {};
-  for (const key of ["name", "members", "stopOrder", "advance"] as const) {
+  for (const key of ["name", "members", "stopOrder", "advance", "restartWarning"] as const) {
     if (Object.prototype.hasOwnProperty.call(body, key)) input[key] = body[key];
   }
   return input;
@@ -181,6 +181,13 @@ router.post(
   permission({ level: ROLE.USER }),
   validator({ query: { id: String } }),
   runRoute("stop")
+);
+
+router.post(
+  "/warned-restart",
+  permission({ level: ROLE.USER }),
+  validator({ query: { id: String } }),
+  runRoute("warned-restart")
 );
 
 // Cancel the active run; responds with the final run state

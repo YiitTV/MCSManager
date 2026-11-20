@@ -1,4 +1,5 @@
 import Router from "@koa/router";
+import type Koa from "koa";
 import { isEmpty, toBoolean, toNumber, toText } from "mcsmanager-common";
 import { diffConfig } from "../common/config_diff";
 import { DataPlaneMode } from "../entity/setting";
@@ -7,6 +8,13 @@ import { $t } from "../i18n";
 import { speedLimit } from "../middleware/limit";
 import permission from "../middleware/permission";
 import validator from "../middleware/validator";
+import {
+  isShortcutId,
+  parseShortcuts,
+  readConsoleShortcuts,
+  saveConsoleShortcuts
+} from "../service/console_shortcuts";
+import { logger } from "../service/log";
 import { updateInstanceWithAudit } from "../service/instance_config_audit";
 import { getInstanceNameSafely } from "../service/instance_name_service";
 import { checkInstanceAdvancedParams, getAppMarketList } from "../service/instance_service";
@@ -119,6 +127,66 @@ router.all(
     }
   }
 );
+
+// The protected-instance router already checks ownership. Check again after
+// storage reads and require the current administrator role for writes.
+type ShortcutOperation = "read" | "save" | "run";
+
+function rejectShortcut(ctx: Koa.ParameterizedContext, status: number, key: string) {
+  ctx.status = status;
+  ctx.body = $t(key);
+}
+
+function consoleShortcuts(operation: ShortcutOperation) {
+  return async (ctx: Koa.ParameterizedContext) => {
+    const { daemonId, uuid } = ctx.query;
+    const isId = (id: unknown): id is string =>
+      typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id);
+    if (!isId(daemonId) || !isId(uuid) || uuid === "global0001") {
+      return rejectShortcut(ctx, 400, "TXT_CODE_console_shortcuts.invalid");
+    }
+    const userUuid = getUserUuid(ctx);
+    const canOperate = () =>
+      getUserPermission(ctx) >= ROLE.USER && isHaveInstanceByUuid(userUuid, daemonId, uuid);
+    if (!canOperate() || (operation === "save" && !isTopPermissionByUuid(userUuid))) {
+      return rejectShortcut(ctx, 403, "TXT_CODE_permission.forbiddenInstance");
+    }
+    const body = ctx.request.body;
+    const input = operation === "save" ? parseShortcuts(body?.shortcuts) : null;
+    const id = body?.id;
+    if ((operation === "save" && input === null) || (operation === "run" && !isShortcutId(id))) {
+      return rejectShortcut(ctx, 400, "TXT_CODE_console_shortcuts.invalid");
+    }
+    try {
+      if (input !== null) {
+        ctx.body = await saveConsoleShortcuts(daemonId, uuid, input);
+        return;
+      }
+      const shortcuts = await readConsoleShortcuts(daemonId, uuid);
+      if (!canOperate()) return rejectShortcut(ctx, 403, "TXT_CODE_permission.forbiddenInstance");
+      if (operation === "read") {
+        ctx.body = shortcuts;
+        return;
+      }
+      const shortcut = shortcuts.find((item) => item.id === id);
+      if (!shortcut) return rejectShortcut(ctx, 404, "TXT_CODE_console_shortcuts.notFound");
+      const remoteService = RemoteServiceSubsystem.getInstance(daemonId);
+      await new RemoteRequest(remoteService).request(
+        "instance/command",
+        { instanceUuid: uuid, command: shortcut.command, requireRunning: true },
+        3000
+      );
+      ctx.body = true;
+    } catch {
+      logger.warn(`Console shortcut ${operation} failed for ${daemonId}/${uuid}`);
+      return rejectShortcut(ctx, 500, "TXT_CODE_console_shortcuts.failed");
+    }
+  };
+}
+
+router.get("/console_shortcuts", permission({ level: ROLE.USER }), consoleShortcuts("read"));
+router.put("/console_shortcuts", permission({ level: ROLE.ADMIN }), consoleShortcuts("save"));
+router.post("/console_shortcuts/run", permission({ level: ROLE.USER }), consoleShortcuts("run"));
 
 // [Low-level Permission]
 // restart the instance

@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
 import { v4 } from "uuid";
+import type { RunAction } from "../entity/instance_group";
 import { NotificationEventType } from "../entity/notification_config";
 import { $t } from "../i18n";
 
@@ -15,7 +16,7 @@ const TEXT_MAX = 200;
 export type NotificationInput = {
   type: Exclude<NotificationEventType, "notification.test">;
   instance?: { daemonId: string; uuid: string; name: string; daemonName?: string };
-  group?: { uuid: string; name: string; action: "start" | "stop"; runId: string };
+  group?: { uuid: string; name: string; action: RunAction; runId: string };
   backup?: {
     id: string;
     name?: string;
@@ -33,7 +34,7 @@ export interface NotificationEvent {
   timestamp: string;
   panel: { name: string };
   instance?: { daemonId: string; uuid: string; name: string; daemonName?: string };
-  group?: { uuid: string; name: string; action: "start" | "stop"; runId: string };
+  group?: { uuid: string; name: string; action: RunAction; runId: string };
   backup?: {
     id: string;
     name?: string;
@@ -122,7 +123,10 @@ export function buildEvent(
     event.group = {
       uuid: clean(input.group.uuid, ID_MAX),
       name: clean(input.group.name, NAME_MAX),
-      action: input.group.action === "stop" ? "stop" : "start",
+      action:
+        input.group.action === "stop" || input.group.action === "warned-restart"
+          ? input.group.action
+          : "start",
       runId: clean(input.group.runId, ID_MAX)
     };
   }

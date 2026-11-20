@@ -13,13 +13,16 @@ import {
   MAX_MEMBERS_PER_GROUP,
   MAX_TIMEOUT_SEC,
   MIN_TIMEOUT_SEC,
+  RestartWarning,
   defaultAdvance,
+  defaultRestartWarning,
   memberKey
 } from "../entity/instance_group";
+import { ROLE } from "../entity/user";
 import { $t } from "../i18n";
 import { logger } from "./log";
 import { validatePattern } from "./instance_group_matcher";
-import { isHaveInstanceByUuid } from "./permission_service";
+import { isHaveInstance } from "./permission_service";
 import userSystem from "./user_service";
 
 // Error carrying the HTTP status the router should answer with.
@@ -37,6 +40,7 @@ export interface InstanceGroupInput {
   members?: unknown;
   stopOrder?: unknown;
   advance?: unknown;
+  restartWarning?: unknown;
 }
 
 export interface InstanceGroupStore {
@@ -156,6 +160,31 @@ export function validateAdvance(value: unknown, base: InstanceGroupAdvance): Ins
   return result;
 }
 
+export function validateRestartWarning(
+  value: unknown,
+  base = defaultRestartWarning()
+): RestartWarning {
+  if (value !== undefined && !isPlainObject(value)) throw validationError("invalidRestartWarning");
+  const offsets = value?.offsetsSec === undefined ? base.offsetsSec : value.offsetsSec;
+  const template = value?.message === undefined ? base.message : value.message;
+  if (
+    !Array.isArray(offsets) ||
+    offsets.length < 1 ||
+    offsets.length > 10 ||
+    offsets.some((offset) => !Number.isInteger(offset) || offset < 1 || offset > 3600) ||
+    new Set(offsets).size !== offsets.length ||
+    typeof template !== "string"
+  ) {
+    throw validationError("invalidRestartWarning");
+  }
+  const message = template.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").trim();
+  // An operator-edited warning must remain a single argument line even if a
+  // process declared as a game server is backed by an interactive shell.
+  if (!message || message.length > 200 || /[;&|<>`$\\]/.test(message))
+    throw validationError("invalidRestartWarning");
+  return { offsetsSec: [...offsets].sort((a, b) => b - a), message };
+}
+
 // Sanitise a record read from storage so a hand-edited or corrupted file can
 // never carry out-of-range values into the runner. Returns null when unusable.
 function normalizeStored(raw: any): InstanceGroup | null {
@@ -177,6 +206,11 @@ function normalizeStored(raw: any): InstanceGroup | null {
     } catch {
       group.advance = defaultAdvance();
     }
+    try {
+      group.restartWarning = validateRestartWarning(raw.restartWarning);
+    } catch {
+      group.restartWarning = defaultRestartWarning();
+    }
     group.createdAt = Number(raw.createdAt) || 0;
     group.updatedAt = Number(raw.updatedAt) || 0;
     return group;
@@ -190,7 +224,8 @@ function cloneGroup(group: InstanceGroup): InstanceGroup {
     ...group,
     members: group.members.map((m) => ({ ...m })),
     stopOrder: [...group.stopOrder],
-    advance: { ...group.advance }
+    advance: { ...group.advance },
+    restartWarning: { ...group.restartWarning, offsetsSec: [...group.restartWarning.offsetsSec] }
   };
 }
 
@@ -297,6 +332,7 @@ export class InstanceGroupService {
     group.members = members;
     group.stopOrder = stopOrder;
     group.advance = advance;
+    group.restartWarning = validateRestartWarning(input.restartWarning);
     group.createdAt = now;
     group.updatedAt = now;
 
@@ -339,6 +375,9 @@ export class InstanceGroupService {
         next.stopOrder = validateStopOrder(input.stopOrder, next.members);
       if (input.advance !== undefined)
         next.advance = validateAdvance(input.advance, current.advance);
+
+      if (input.restartWarning !== undefined)
+        next.restartWarning = validateRestartWarning(input.restartWarning, current.restartWarning);
 
       const membersChanged =
         input.members !== undefined &&
@@ -422,6 +461,7 @@ export interface InstanceGroupView {
   members: InstanceGroupMemberView[];
   stopOrder: string[];
   advance: InstanceGroupAdvance;
+  restartWarning: RestartWarning;
   createdAt: number;
   updatedAt: number;
 }
@@ -475,6 +515,7 @@ export async function buildGroupViews(
     }),
     stopOrder: group.stopOrder,
     advance: group.advance,
+    restartWarning: group.restartWarning,
     createdAt: group.createdAt,
     updatedAt: group.updatedAt
   }));
@@ -484,8 +525,10 @@ export async function buildGroupViews(
 const instanceGroupService = new InstanceGroupService({
   storage: () => Storage.getStorage(),
   userExists: (uuid) => userSystem.hasInstance(uuid),
-  canOperate: (userUuid, daemonId, instanceUuid) =>
-    isHaveInstanceByUuid(userUuid, daemonId, instanceUuid),
+  canOperate: (userUuid, daemonId, instanceUuid) => {
+    const user = userSystem.getInstance(userUuid);
+    return !!user && user.permission >= ROLE.USER && isHaveInstance(user, daemonId, instanceUuid);
+  },
   now: () => Date.now()
 });
 

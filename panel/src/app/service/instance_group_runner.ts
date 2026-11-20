@@ -4,6 +4,7 @@ import {
   InstanceGroup,
   InstanceGroupMember,
   InstanceGroupRun,
+  LifecycleAction,
   MAX_ACTIVE_RUNS,
   RUN_RETENTION_MS,
   RunAction,
@@ -59,12 +60,21 @@ export interface InstanceGroupRunnerDeps {
     event: "instance/open" | "instance/stop",
     instanceUuid: string
   ) => Promise<{ nickname?: string } | void>;
+  getRestartTargets: (
+    daemonId: string,
+    instanceUuids: string[]
+  ) => Promise<Map<string, RestartTarget>>;
+  sendRestartCommand: (member: InstanceGroupMember, type: string, command: string) => Promise<void>;
   logOperation: (
-    action: RunAction,
+    action: LifecycleAction,
     info: { daemonId: string; instanceUuid: string; nickname?: string; operator: RunOperator }
   ) => void;
   now: () => number;
 }
+
+type RestartTarget = { type: string; status: number };
+
+type LifecycleStep = { member: InstanceGroupMember; action: LifecycleAction };
 
 type StepOutcome = { state: "done" | "skipped" | "failed"; reason?: string };
 
@@ -112,18 +122,34 @@ export class InstanceGroupRunner {
         $t("TXT_CODE_instance_group.tooManyRuns", { max: MAX_ACTIVE_RUNS })
       );
 
+    if (action === "warned-restart") {
+      if (group.members.length === 0)
+        throw new InstanceGroupError(400, $t("TXT_CODE_instance_group.emptyRestart"));
+      for (const { daemonId, instanceUuid } of group.members) {
+        if (!this.deps.authorize(group.ownerUuid, daemonId, instanceUuid))
+          throw new InstanceGroupError(403, $t("TXT_CODE_instance_group.forbiddenMember"));
+      }
+    }
+
     // Replace a finished run that is still retained
     const previous = this.runs.get(group.uuid);
     if (previous?.retentionTimer) clearTimeout(previous.retentionTimer);
 
-    const members = orderedMembers(group, action);
+    const plan: LifecycleStep[] =
+      action === "warned-restart"
+        ? [...lifecycleSteps(group, "stop"), ...lifecycleSteps(group, "start")]
+        : lifecycleSteps(group, action);
     const run: InstanceGroupRun = {
       runId: v4().replace(/-/g, ""),
       groupId: group.uuid,
       ownerUuid: group.ownerUuid,
       action,
       state: "running",
-      steps: members.map((m) => ({ key: memberKey(m.daemonId, m.instanceUuid), state: "pending" })),
+      steps: plan.map(({ member, action: stepAction }) => ({
+        key: memberKey(member.daemonId, member.instanceUuid),
+        state: "pending",
+        ...(action === "warned-restart" ? { action: stepAction } : {})
+      })),
       startedAt: this.deps.now()
     };
     const active: ActiveRun = {
@@ -135,12 +161,12 @@ export class InstanceGroupRunner {
     };
     this.runs.set(group.uuid, active);
     this.activeCount++;
-    active.done = this.execute(active, members).catch((err) => {
+    active.done = this.execute(active, plan).catch((err) => {
       logger.error(`Instance group run ${run.runId} crashed:`, err);
       if (run.state === "running") run.state = "failed";
     });
     active.done = active.done.finally(() => this.finish(active));
-    this.notify(active, "group.run_started", { memberCount: run.steps.length });
+    this.notify(active, "group.run_started", { memberCount: group.members.length });
     return snapshot(run);
   }
 
@@ -178,7 +204,7 @@ export class InstanceGroupRunner {
     active.retentionTimer.unref?.();
 
     const base = {
-      memberCount: run.steps.length,
+      memberCount: active.group.members.length,
       durationSec: Math.max(0, Math.round((run.finishedAt - run.startedAt) / 1000))
     };
     if (run.state === "failed") {
@@ -215,16 +241,20 @@ export class InstanceGroupRunner {
     }
   }
 
-  private async execute(active: ActiveRun, members: InstanceGroupMember[]) {
+  private async execute(active: ActiveRun, plan: LifecycleStep[]) {
     const { run, controller } = active;
-    for (let i = 0; i < members.length; i++) {
+    if (run.action === "warned-restart") {
+      const prepared = await this.prepareRestart(active);
+      if (!prepared) return;
+    }
+    for (const [index, { member, action }] of plan.entries()) {
       if (controller.signal.aborted) {
         run.state = "cancelled";
         return;
       }
-      const step = run.steps[i];
+      const step = run.steps[index];
       step.state = "waiting";
-      const outcome = await this.runStep(active, members[i]);
+      const outcome = await this.runStep(active, member, action);
       step.state = outcome.state;
       if (outcome.reason) step.reason = outcome.reason;
       if (outcome.state === "failed") {
@@ -232,14 +262,117 @@ export class InstanceGroupRunner {
         return;
       }
     }
-    run.state = "succeeded";
+    run.state = controller.signal.aborted ? "cancelled" : "succeeded";
   }
 
-  private async runStep(active: ActiveRun, member: InstanceGroupMember): Promise<StepOutcome> {
+  private async prepareRestart(active: ActiveRun): Promise<boolean> {
+    const { run, group, controller } = active;
+    const { signal } = controller;
+    const { offsetsSec, message } = group.restartWarning;
+    const deadline = run.startedAt + offsetsSec[0] * 1000;
+    run.countdownEndsAt = deadline;
+    try {
+      for (const seconds of offsetsSec) {
+        await waitUntil(deadline - seconds * 1000 - this.deps.now(), signal);
+        signal.throwIfAborted();
+        await this.dispatchRestartCommands(
+          active,
+          `say ${message.replace(/\{seconds\}/g, String(seconds))}`
+        );
+      }
+      await waitUntil(deadline - this.deps.now(), signal);
+      signal.throwIfAborted();
+      delete run.countdownEndsAt;
+      await this.dispatchRestartCommands(active, "save-all");
+      signal.throwIfAborted();
+      return true;
+    } catch (err) {
+      if (signal.aborted) {
+        run.state = "cancelled";
+      } else {
+        run.state = "failed";
+        logger.warn(`Instance group: restart preparation failed for ${run.groupId}:`, err);
+      }
+      return false;
+    } finally {
+      delete run.countdownEndsAt;
+    }
+  }
+
+  private async dispatchRestartCommands(active: ActiveRun, command: string) {
+    const { run, group, controller } = active;
+    const { signal } = controller;
+    const byDaemon = new Map<string, string[]>();
+    const authorized = (daemonId: string, instanceUuid: string) =>
+      this.deps.authorize(run.ownerUuid, daemonId, instanceUuid);
+    const failure = (daemonId: string, instanceUuid: string, reason: string) => {
+      const key = memberKey(daemonId, instanceUuid);
+      const step = run.steps.find((step) => step.key === key);
+      if (step) Object.assign(step, { state: "failed", reason });
+      return new Error(reason);
+    };
+
+    for (const { daemonId, instanceUuid } of group.members) {
+      if (!authorized(daemonId, instanceUuid))
+        throw failure(daemonId, instanceUuid, "not_permitted");
+      const uuids = byDaemon.get(daemonId) ?? [];
+      uuids.push(instanceUuid);
+      byDaemon.set(daemonId, uuids);
+    }
+
+    // Keep waiting for outstanding requests on failure so no work outlives this run.
+    const batches = await Promise.all(
+      [...byDaemon].map(async ([daemonId, uuids]) => {
+        try {
+          const targets = await this.deps.getRestartTargets(daemonId, uuids);
+          return { daemonId, uuids, targets };
+        } catch (error) {
+          return { daemonId, uuids, error };
+        }
+      })
+    );
+    signal.throwIfAborted();
+    const targets: (InstanceGroupMember & { target: RestartTarget })[] = [];
+    for (const { daemonId, uuids, targets: statuses, error } of batches) {
+      if (!statuses) {
+        for (const uuid of uuids) failure(daemonId, uuid, "command_failed");
+        throw error;
+      }
+      for (const instanceUuid of uuids) {
+        if (!authorized(daemonId, instanceUuid))
+          throw failure(daemonId, instanceUuid, "not_permitted");
+        const target = statuses.get(instanceUuid);
+        if (!target) throw failure(daemonId, instanceUuid, "command_failed");
+        targets.push({ daemonId, instanceUuid, target });
+      }
+    }
+    const failures = await Promise.all(
+      targets.map(async ({ daemonId, instanceUuid, target }) => {
+        if (
+          target.status !== INSTANCE_STATUS.RUNNING ||
+          (target.type !== "minecraft/java/paper" && target.type !== "minecraft/java/purpur")
+        )
+          return;
+        try {
+          await this.deps.sendRestartCommand({ daemonId, instanceUuid }, target.type, command);
+        } catch {
+          if (!signal.aborted) return failure(daemonId, instanceUuid, "command_failed");
+        }
+      })
+    );
+    const error = failures.find(Boolean);
+    if (error) throw error;
+  }
+
+  private async runStep(
+    active: ActiveRun,
+    member: InstanceGroupMember,
+    action: LifecycleAction
+  ): Promise<StepOutcome> {
     const { run, controller } = active;
     const { daemonId, instanceUuid } = member;
     const { signal } = controller;
-    const isStart = run.action === "start";
+    const isStart = action === "start";
 
     // Authorisation before the event subscription ...
     if (!this.deps.authorize(run.ownerUuid, daemonId, instanceUuid))
@@ -271,7 +404,7 @@ export class InstanceGroupRunner {
         if (status === INSTANCE_STATUS.STOPPING) sendCommand = false;
       }
 
-      return await this.waitForTarget(active, member, stream, sendCommand);
+      return await this.waitForTarget(active, member, action, stream, sendCommand);
     } finally {
       stream?.close();
     }
@@ -282,13 +415,14 @@ export class InstanceGroupRunner {
   private waitForTarget(
     active: ActiveRun,
     member: InstanceGroupMember,
+    action: LifecycleAction,
     stream: RunnerStream,
     sendCommand: boolean
   ): Promise<StepOutcome> {
     const { run, group, controller, operator } = active;
     const { daemonId, instanceUuid } = member;
     const { signal } = controller;
-    const isStart = run.action === "start";
+    const isStart = action === "start";
     const advance = group.advance;
 
     return new Promise<StepOutcome>((resolve) => {
@@ -363,7 +497,7 @@ export class InstanceGroupRunner {
         .then(
           (result) => {
             try {
-              this.deps.logOperation(run.action, {
+              this.deps.logOperation(action, {
                 daemonId,
                 instanceUuid,
                 nickname: result?.nickname,
@@ -374,7 +508,7 @@ export class InstanceGroupRunner {
             }
           },
           (err) => {
-            logger.warn(`Instance group: ${run.action} command failed for ${instanceUuid}:`, err);
+            logger.warn(`Instance group: ${action} command failed for ${instanceUuid}:`, err);
             finish({ state: "failed", reason: "command_failed" });
           }
         );
@@ -382,7 +516,24 @@ export class InstanceGroupRunner {
   }
 }
 
-function orderedMembers(group: InstanceGroup, action: RunAction): InstanceGroupMember[] {
+function waitUntil(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (delayMs <= 0 || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, delayMs);
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
+function lifecycleSteps(group: InstanceGroup, action: LifecycleAction): LifecycleStep[] {
+  return orderedMembers(group, action).map((member) => ({ member, action }));
+}
+
+function orderedMembers(group: InstanceGroup, action: LifecycleAction): InstanceGroupMember[] {
   if (action === "start") return group.members.map((m) => ({ ...m }));
   const byKey = new Map(group.members.map((m) => [memberKey(m.daemonId, m.instanceUuid), m]));
   const ordered: InstanceGroupMember[] = [];
@@ -415,6 +566,28 @@ const instanceGroupRunner = new InstanceGroupRunner({
       if (err instanceof RemoteRequestTimeoutError) return {};
       throw err;
     }
+  },
+  getRestartTargets: async (daemonId, instanceUuids) => {
+    const result = await new RemoteRequest(RemoteServiceSubsystem.getInstance(daemonId)).request(
+      "instance/status_batch",
+      { instanceUuids, includeType: true },
+      3000
+    );
+    const targets = new Map<string, RestartTarget>();
+    if (!Array.isArray(result?.instances)) return targets;
+    for (const item of result.instances) {
+      if (typeof item?.type === "string" && typeof item.status === "number") {
+        targets.set(item.instanceUuid, { type: item.type, status: item.status });
+      }
+    }
+    return targets;
+  },
+  sendRestartCommand: async ({ daemonId, instanceUuid }, expectedType, command) => {
+    await new RemoteRequest(RemoteServiceSubsystem.getInstance(daemonId)).request(
+      "instance/command",
+      { instanceUuid, command, requireRunning: true, expectedType },
+      3000
+    );
   },
   logOperation: (action, { daemonId, instanceUuid, nickname, operator }) => {
     operationLogger.log(action === "start" ? "instance_start" : "instance_stop", {

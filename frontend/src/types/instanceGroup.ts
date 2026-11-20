@@ -25,6 +25,16 @@ export interface GroupMemberView extends GroupMemberRef {
   status?: number | "unknown";
 }
 
+export interface RestartWarning {
+  offsetsSec: number[];
+  message: string;
+}
+
+export const DEFAULT_RESTART_WARNING: RestartWarning = {
+  offsetsSec: [300, 60, 10],
+  message: "Sunucu {seconds} saniye içinde yeniden başlatılıyor"
+};
+
 export interface InstanceGroupView {
   uuid: string;
   // Active or most recent run (kept by the panel for 10 minutes), null when none.
@@ -34,6 +44,7 @@ export interface InstanceGroupView {
   // "<daemonId>::<instanceUuid>" keys, a permutation of the members.
   stopOrder: string[];
   advance: GroupAdvance;
+  restartWarning?: RestartWarning;
   createdAt: number;
   updatedAt: number;
 }
@@ -43,6 +54,7 @@ export interface InstanceGroupInput {
   members: GroupMemberRef[];
   stopOrder: string[];
   advance: GroupAdvance;
+  restartWarning?: RestartWarning;
 }
 
 export type GroupRunState = "running" | "succeeded" | "failed" | "cancelled";
@@ -52,17 +64,19 @@ export interface GroupRunStep {
   key: string;
   state: GroupStepState;
   reason?: string;
+  action?: "start" | "stop";
 }
 
 export interface GroupRun {
   runId: string;
   groupId: string;
   ownerUuid?: string;
-  action: "start" | "stop";
+  action: "start" | "stop" | "warned-restart";
   state: GroupRunState;
   steps: GroupRunStep[];
   startedAt: number;
   finishedAt?: number;
+  countdownEndsAt?: number;
 }
 
 // Limits mirrored from the panel (validated again server-side).

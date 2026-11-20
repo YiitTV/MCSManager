@@ -46,6 +46,7 @@ export function useInstanceGroupsBoard() {
     load,
     startGroup,
     stopGroup,
+    restartGroupWithWarnings,
     cancelGroup,
     removeGroup,
     saveGroup
@@ -74,6 +75,7 @@ export function useInstanceGroupsBoard() {
 
   const onStart = (group: InstanceGroupView) => runGroup(group, startGroup);
   const onStop = (group: InstanceGroupView) => runGroup(group, stopGroup);
+  const onWarnedRestart = (group: InstanceGroupView) => runGroup(group, restartGroupWithWarnings);
   const onCancel = (group: InstanceGroupView) =>
     guarded(group.uuid, async () => {
       await cancelGroup(group.uuid);
@@ -184,6 +186,7 @@ export function useInstanceGroupsBoard() {
     reload,
     onStart,
     onStop,
+    onWarnedRestart,
     onCancel,
     onRemove,
     editorOpen,

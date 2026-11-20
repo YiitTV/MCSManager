@@ -25,6 +25,7 @@ const {
   reload,
   onStart,
   onStop,
+  onWarnedRestart,
   onCancel,
   onRemove,
   editorOpen,
@@ -66,6 +67,7 @@ const {
         :pending="pending[group.uuid]"
         @start="onStart(group)"
         @stop="onStop(group)"
+        @warned-restart="onWarnedRestart(group)"
         @cancel="onCancel(group)"
         @edit="openEditor(group)"
         @remove="onRemove(group)"

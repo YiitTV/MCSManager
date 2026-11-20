@@ -21,6 +21,7 @@ vi.mock("@/services/apis/instanceGroup", () => ({
   getInstanceGroupRun: mocks.wrap(mocks.run),
   startInstanceGroup: mocks.wrap(mocks.start),
   stopInstanceGroup: mocks.wrap(mocks.stop),
+  restartInstanceGroupWithWarnings: mocks.wrap(mocks.stop),
   cancelInstanceGroupRun: mocks.wrap(mocks.cancel),
   createInstanceGroup: mocks.wrap(mocks.create),
   updateInstanceGroup: mocks.wrap(mocks.update),
