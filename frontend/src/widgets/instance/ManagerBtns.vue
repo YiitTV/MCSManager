@@ -31,6 +31,7 @@ import { computed, ref, watch } from "vue";
 import type { RouteLocationPathRaw } from "vue-router";
 import { useLayoutCardTools } from "../../hooks/useCardTools";
 import { arrayFilter } from "../../tools/array";
+import Monitoring from "./Monitoring.vue";
 import EventConfig from "./dialogs/EventConfig.vue";
 import InstanceDetail from "./dialogs/InstanceDetail.vue";
 import InstanceFundamentalDetail from "./dialogs/InstanceFundamentalDetail.vue";
@@ -40,6 +41,7 @@ import PingConfig from "./dialogs/PingConfig.vue";
 import RconSettings from "./dialogs/RconSettings.vue";
 import TermConfig from "./dialogs/TermConfig.vue";
 
+const monitoringOpen = ref(false);
 const terminalConfigDialog = ref<InstanceType<typeof TermConfig>>();
 const rconSettingsDialog = ref<InstanceType<typeof RconSettings>>();
 const mcSettingsDialog = ref<InstanceType<typeof McPingSettings>>();
@@ -122,6 +124,14 @@ const refreshInstanceInfo = async () => {
 const btns = computed(() => {
   if (!instanceInfo.value) return [];
   return arrayFilter([
+    {
+      title: t("TXT_CODE_instance_monitoring.menu"),
+      icon: DashboardOutlined,
+      condition: () => !isGlobalTerminal.value,
+      click: () => {
+        monitoringOpen.value = true;
+      }
+    },
     {
       title: t("TXT_CODE_d07742fe"),
       icon: ControlOutlined,
@@ -274,6 +284,14 @@ watch(instanceInfo, (cfg, oldCfg) => {
 </script>
 
 <template>
+  <a-modal
+    v-model:open="monitoringOpen"
+    :title="t('TXT_CODE_instance_monitoring.title')"
+    :footer="null"
+    :width="720"
+  >
+    <Monitoring v-if="monitoringOpen" :instance-id="instanceId" :daemon-id="daemonId" />
+  </a-modal>
   <CardPanel class="containerWrapper" style="height: 100%">
     <template #title>{{ card.title }}</template>
     <template #body>

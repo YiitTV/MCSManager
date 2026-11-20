@@ -3812,5 +3812,15 @@
   "TXT_CODE_backup_ui.restoreSucceeded": "Geri yükleme tamamlandı.",
   "TXT_CODE_backup_ui.restoreFailed": "Geri yükleme başarısız.",
   "TXT_CODE_backup_ui.restoreQueued": "Geri yükleme sırada",
-  "TXT_CODE_backup_ui.phase_downloading": "Yedek indiriliyor"
+  "TXT_CODE_backup_ui.phase_downloading": "Yedek indiriliyor",
+  "TXT_CODE_instance_monitoring.invalidRequest": "Geçersiz sunucu izleme isteği.",
+  "TXT_CODE_instance_monitoring.menu": "Kaynak İzleme",
+  "TXT_CODE_instance_monitoring.title": "Kaynak İzleme · Son 24 Saat",
+  "TXT_CODE_instance_monitoring.memoryWarning": "Yüksek RAM kullanımı",
+  "TXT_CODE_instance_monitoring.tpsWarning": "Düşük TPS",
+  "TXT_CODE_instance_monitoring.sparkline": "Son bir saatteki RAM kullanım eğilimi",
+  "TXT_CODE_instance_monitoring.ramMib": "RAM (MiB)",
+  "TXT_CODE_instance_monitoring.cpuPercent": "CPU (%)",
+  "TXT_CODE_instance_monitoring.unavailable": "İzleme verileri kullanılamıyor.",
+  "TXT_CODE_instance_monitoring.noSamples": "Henüz izleme verisi yok."
 }

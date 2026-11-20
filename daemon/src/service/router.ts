@@ -16,6 +16,7 @@ import "../routers/environment_router";
 import "../routers/file_router";
 import "../routers/info_router";
 import "../routers/instance_event_router";
+import "../routers/instance_monitoring_router";
 import "../routers/Instance_router";
 import "../routers/java_manager_router";
 import "../routers/minecraft_operations_router";

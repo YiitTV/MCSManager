@@ -75,3 +75,4 @@ export * from "./backup_validation";
 export { GlobalVariable, InstanceStreamListener, MCServerStatus, StorageSubsystem };
 
 export * from "./minecraft_operations";
+export * from "./instance_monitoring";

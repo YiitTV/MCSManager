@@ -16,6 +16,7 @@ import instanceRouter from "./routers/instance_admin_router";
 import exchangeRouter from "./routers/instance_exchange_router";
 import instanceGroupRouter from "./routers/instance_group_router";
 import minecraftOperationsRouter from "./routers/minecraft_operations_router";
+import instanceMonitoringRouter from "./routers/instance_monitoring_router";
 import userInstanceRouter from "./routers/instance_operate_router";
 import javaManagerRouter from "./routers/java_manager_router";
 import loginRouter from "./routers/login_router";
@@ -32,6 +33,9 @@ import userRouter from "./routers/user_overview_router";
 export function mountRouters(app: Koa<Koa.DefaultState, Koa.DefaultContext>) {
   const apiRouter = new Router({ prefix: "/api" });
   apiRouter.use(overviewRouter.routes()).use(overviewRouter.allowedMethods());
+  apiRouter
+    .use(instanceMonitoringRouter.routes())
+    .use(instanceMonitoringRouter.allowedMethods());
   apiRouter.use(userInstanceRouter.routes()).use(userInstanceRouter.allowedMethods());
   apiRouter.use(instanceRouter.routes()).use(instanceRouter.allowedMethods());
   apiRouter.use(serviceRouter.routes()).use(serviceRouter.allowedMethods());

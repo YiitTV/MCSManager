@@ -3812,5 +3812,15 @@
   "TXT_CODE_backup_ui.restoreSucceeded": "恢复成功。",
   "TXT_CODE_backup_ui.restoreFailed": "恢复失败。",
   "TXT_CODE_backup_ui.restoreQueued": "恢复已排队",
-  "TXT_CODE_backup_ui.phase_downloading": "正在下载备份"
+  "TXT_CODE_backup_ui.phase_downloading": "正在下载备份",
+  "TXT_CODE_instance_monitoring.invalidRequest": "无效的实例监控请求。",
+  "TXT_CODE_instance_monitoring.menu": "资源监控",
+  "TXT_CODE_instance_monitoring.title": "资源监控 · 最近 24 小时",
+  "TXT_CODE_instance_monitoring.memoryWarning": "内存占用过高",
+  "TXT_CODE_instance_monitoring.tpsWarning": "TPS 过低",
+  "TXT_CODE_instance_monitoring.sparkline": "最近一小时的内存使用趋势",
+  "TXT_CODE_instance_monitoring.ramMib": "内存 (MiB)",
+  "TXT_CODE_instance_monitoring.cpuPercent": "CPU (%)",
+  "TXT_CODE_instance_monitoring.unavailable": "监控数据暂不可用。",
+  "TXT_CODE_instance_monitoring.noSamples": "暂无监控采样数据。"
 }

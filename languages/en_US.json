@@ -3812,5 +3812,15 @@
   "TXT_CODE_backup_ui.restoreSucceeded": "Restore completed.",
   "TXT_CODE_backup_ui.restoreFailed": "Restore failed.",
   "TXT_CODE_backup_ui.restoreQueued": "Restore queued",
-  "TXT_CODE_backup_ui.phase_downloading": "Downloading backup"
+  "TXT_CODE_backup_ui.phase_downloading": "Downloading backup",
+  "TXT_CODE_instance_monitoring.invalidRequest": "Invalid instance monitoring request.",
+  "TXT_CODE_instance_monitoring.menu": "Resource Monitoring",
+  "TXT_CODE_instance_monitoring.title": "Resource Monitoring · Last 24 Hours",
+  "TXT_CODE_instance_monitoring.memoryWarning": "High RAM usage",
+  "TXT_CODE_instance_monitoring.tpsWarning": "Low TPS",
+  "TXT_CODE_instance_monitoring.sparkline": "RAM trend over the last hour",
+  "TXT_CODE_instance_monitoring.ramMib": "RAM (MiB)",
+  "TXT_CODE_instance_monitoring.cpuPercent": "CPU (%)",
+  "TXT_CODE_instance_monitoring.unavailable": "Monitoring data is unavailable.",
+  "TXT_CODE_instance_monitoring.noSamples": "No monitoring samples yet."
 }

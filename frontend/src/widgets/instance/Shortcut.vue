@@ -35,6 +35,7 @@ import { message, Modal } from "ant-design-vue";
 import _ from "lodash";
 import prettyBytes, { type Options as PrettyOptions } from "pretty-bytes";
 import { computed, toRef } from "vue";
+import Monitoring from "./Monitoring.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -340,23 +341,17 @@ const instanceOperations = computed(() =>
             <span class="title">{{ t("TXT_CODE_fa920c0") }}:</span>
             <span> {{ parseTimestamp(instanceInfo?.config.endTime) }}</span>
           </div>
-          <div
-            v-if="instanceInfo?.info.memoryUsage && instanceInfo?.config?.processType !== 'docker'"
-            class="instance-info-line"
+          <Monitoring
+            :instance-id="targetInstanceInfo?.instanceUuid || instanceId"
+            :daemon-id="targetDaemonId || daemonId"
+            compact
           >
-            <span class="title">{{ t("TXT_CODE_593ee330") }}:</span>
-            <span class="value">
-              {{
-                formatMemoryUsage(instanceInfo?.info.memoryUsage, instanceInfo?.info.memoryLimit)
-              }}
-            </span>
-          </div>
-          <template v-if="instanceInfo?.config?.processType === 'docker'">
-            <div v-if="instanceInfo?.info.cpuUsage != null" class="instance-info-line">
-              <span class="title">{{ t("TXT_CODE_b862a158") }}:</span>
-              <span class="value">{{ parseInt(String(instanceInfo?.info.cpuUsage)) }}%</span>
-            </div>
-            <div v-if="instanceInfo?.info.memoryUsage != null" class="instance-info-line">
+            <div
+              v-if="
+                instanceInfo?.info.memoryUsage && instanceInfo?.config?.processType !== 'docker'
+              "
+              class="instance-info-line"
+            >
               <span class="title">{{ t("TXT_CODE_593ee330") }}:</span>
               <span class="value">
                 {{
@@ -364,6 +359,25 @@ const instanceOperations = computed(() =>
                 }}
               </span>
             </div>
+            <template v-if="instanceInfo?.config?.processType === 'docker'">
+              <div v-if="instanceInfo?.info.cpuUsage != null" class="instance-info-line">
+                <span class="title">{{ t("TXT_CODE_b862a158") }}:</span>
+                <span class="value">{{ parseInt(String(instanceInfo?.info.cpuUsage)) }}%</span>
+              </div>
+              <div v-if="instanceInfo?.info.memoryUsage != null" class="instance-info-line">
+                <span class="title">{{ t("TXT_CODE_593ee330") }}:</span>
+                <span class="value">
+                  {{
+                    formatMemoryUsage(
+                      instanceInfo?.info.memoryUsage,
+                      instanceInfo?.info.memoryLimit
+                    )
+                  }}
+                </span>
+              </div>
+            </template>
+          </Monitoring>
+          <template v-if="instanceInfo?.config?.processType === 'docker'">
             <div v-if="instanceInfo?.info.storageUsage != null" class="instance-info-line">
               <span class="title">{{ t("TXT_CODE_DISK_USAGE") }}:</span>
               <span class="value">

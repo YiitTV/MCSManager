@@ -12,6 +12,7 @@ import "./service/async_task_service/quick_install";
 import { initBackupService } from "./service/backup/service";
 import { checkDependencies } from "./service/dependencies";
 import * as koa from "./service/http";
+import { instanceMonitoring } from "./service/instance_monitoring";
 import logger from "./service/log";
 import { setDaemonShuttingDown } from "./service/panel_notifier";
 import * as protocol from "./service/protocol";
@@ -114,6 +115,7 @@ try {
 }
 
 initBackupService();
+instanceMonitoring.start(() => InstanceSubsystem.getInstances());
 
 (function initCompressModule() {
   try {
@@ -153,6 +155,7 @@ printStartupBanner(config);
 let isExiting = false;
 async function listenExitSig(signal: string, isForce = true) {
   setDaemonShuttingDown();
+  instanceMonitoring.stop();
   if (isExiting && !isForce) {
     logger.warn($t("TXT_CODE_6f862823"));
     return;
