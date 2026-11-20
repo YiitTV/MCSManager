@@ -16,6 +16,7 @@ import {
   BackupPlan,
   BackupRecord,
   BackupRecordsRes,
+  BackupRestoreReq,
   BackupRestoreRes,
   BackupRunReq,
   BackupRunRes,
@@ -663,7 +664,13 @@ export async function getJobs(daemonId: string, instanceUuid: string): Promise<B
   const res = await daemonRequest<BackupStatusRes>(daemonId, BACKUP_PROTOCOL.STATUS, {
     instanceUuid
   });
-  return { running: res?.running, queued: Array.isArray(res?.queued) ? res.queued : [] };
+  return {
+    running: res?.running,
+    queued: Array.isArray(res?.queued) ? res.queued : [],
+    ...(res?.latestRestore?.instanceUuid === instanceUuid
+      ? { latestRestore: res.latestRestore }
+      : {})
+  };
 }
 
 export async function cancelJob(daemonId: string, instanceUuid: string, backupId: string) {
@@ -678,12 +685,12 @@ export async function cancelJob(daemonId: string, instanceUuid: string, backupId
   });
 }
 
-async function destinationsForRecord(record: BackupRecord, localOnly = false) {
+async function destinationsForRecord(record: BackupRecord, type?: "local" | "gdrive") {
   const destinations: PlainBackupDestination[] = [];
   for (const [id, copy] of Object.entries(record.copies)) {
-    if (copy.status !== "ok" || (localOnly && copy.type !== "local")) continue;
+    if (copy.status !== "ok" || (type && copy.type !== type)) continue;
     const destination = await getStoredDestination(id);
-    if (destination && (!localOnly || destination.type === "local")) {
+    if (destination?.type === copy.type) {
       destinations.push(toPlainDestination(destination));
     }
   }
@@ -694,7 +701,8 @@ async function destinationsForRecord(record: BackupRecord, localOnly = false) {
 export async function restoreRecord(
   daemonId: string,
   instanceUuid: string,
-  recordId: string
+  recordId: string,
+  source?: BackupRestoreReq["source"]
 ): Promise<BackupRestoreRes> {
   if (!isValidBackupId(recordId))
     throw new BackupServiceError("VALIDATION", 400, {
@@ -709,11 +717,11 @@ export async function restoreRecord(
   const records = await getRecords(daemonId, instanceUuid);
   const record = records.find((r) => r.id === recordId);
   if (!record) throw new BackupServiceError(BackupErrorCode.RECORD_NOT_FOUND, 404);
-  const destinations = await destinationsForRecord(record);
+  const destinations = await destinationsForRecord(record, source);
   return daemonRequest<BackupRestoreRes>(
     daemonId,
     BACKUP_PROTOCOL.RESTORE,
-    { instanceUuid, recordId, destinations },
+    { instanceUuid, recordId, destinations, ...(source ? { source } : {}) },
     30_000
   );
 }
@@ -733,7 +741,7 @@ export async function requestDownloadTicket(
   const req: BackupDownloadTicketReq = {
     instanceUuid,
     recordId,
-    destinations: record ? await destinationsForRecord(record, true) : []
+    destinations: record ? await destinationsForRecord(record, "local") : []
   };
   return daemonRequest<BackupDownloadTicketRes>(daemonId, BACKUP_PROTOCOL.DOWNLOAD_TICKET, req);
 }

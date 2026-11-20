@@ -3800,5 +3800,17 @@
   "TXT_CODE_minecraft_ops.enable": "启用维护模式",
   "TXT_CODE_minecraft_ops.disable": "禁用维护模式",
   "TXT_CODE_minecraft_ops.auditTitle": "Minecraft 操作",
-  "TXT_CODE_minecraft_ops.auditEntry": "<<operator_name>> 在 <<instance_name>> 上发起了 Minecraft 操作。"
+  "TXT_CODE_minecraft_ops.auditEntry": "<<operator_name>> 在 <<instance_name>> 上发起了 Minecraft 操作。",
+  "TXT_CODE_crash.title": "崩溃分析",
+  "TXT_CODE_crash.badge": "异常退出",
+  "TXT_CODE_crash.empty": "暂无崩溃记录。",
+  "TXT_CODE_crash.loadFailed": "无法加载崩溃记录。",
+  "TXT_CODE_crash.exitCode": "退出代码 {code}",
+  "TXT_CODE_crash.plugin": "可能相关的插件 {plugin}",
+  "TXT_CODE_crash.invalidInstance": "实例或节点 ID 无效。",
+  "TXT_CODE_backup_ui.restoreFromDrive": "从 Google Drive 恢复",
+  "TXT_CODE_backup_ui.restoreSucceeded": "恢复成功。",
+  "TXT_CODE_backup_ui.restoreFailed": "恢复失败。",
+  "TXT_CODE_backup_ui.restoreQueued": "恢复已排队",
+  "TXT_CODE_backup_ui.phase_downloading": "正在下载备份"
 }

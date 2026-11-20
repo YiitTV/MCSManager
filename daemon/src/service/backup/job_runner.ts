@@ -12,6 +12,7 @@ import {
   BackupFinishedPayload,
   BackupPlanSnapshot,
   BackupRecord,
+  BackupRestoreFinishedPayload,
   BackupRestoreReq,
   BackupRestoreRes,
   BackupRunReq,
@@ -51,16 +52,7 @@ import { assertLocalDirectoryAllowed } from "./local_dir_policy";
 /** Extra broadcast (daemon only) with the outcome of a restore job. */
 export const BACKUP_RESTORE_FINISHED_EVENT = "backup/restore_finished";
 
-export interface BackupRestoreFinishedPayload {
-  instanceUuid: string;
-  jobId: string;
-  recordId: string;
-  ok: boolean;
-  errorCode?: BackupErrorCode;
-  errorSummary?: string;
-  warnings: string[];
-  durationMs: number;
-}
+const MAX_RESTORE_RESULTS = 256;
 
 /** Slice of an instance the runner needs. */
 export interface RunnerInstance extends HookInstance {
@@ -187,6 +179,7 @@ function publicRecord(record: StoredBackupRecord): BackupRecord {
 }
 
 export class BackupJobRunner {
+  private readonly restoreResults = new Map<string, BackupRestoreFinishedPayload>();
   private readonly now: () => number;
   private readonly newId: () => string;
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -202,7 +195,9 @@ export class BackupJobRunner {
   // ---------------------------------------------------------------- public API
 
   status(instanceUuid: string): BackupStatusRes {
-    return this.deps.queue.status(instanceUuid);
+    const status = this.deps.queue.status(instanceUuid);
+    const latestRestore = this.restoreResults.get(instanceUuid);
+    return latestRestore ? { ...status, latestRestore } : status;
   }
 
   cancel(instanceUuid: string, backupId: string): boolean {
@@ -217,6 +212,7 @@ export class BackupJobRunner {
   async removeInstanceBackups(instanceUuid: string, deleteFile: boolean): Promise<void> {
     const { queue, store } = this.deps;
     await queue.cancelInstance(instanceUuid);
+    this.restoreResults.delete(instanceUuid);
 
     const records = store.list(instanceUuid);
     const copies = records.flatMap((record) =>
@@ -289,7 +285,11 @@ export class BackupJobRunner {
 
   /** Validate and queue a restore job. */
   enqueueRestore(req: BackupRestoreReq): BackupRestoreRes {
-    if (!isValidBackupId(req.instanceUuid) || !isValidBackupId(req.recordId))
+    if (
+      !isValidBackupId(req.instanceUuid) ||
+      !isValidBackupId(req.recordId) ||
+      (req.source !== undefined && req.source !== "gdrive")
+    )
       invalid("Invalid request");
     const instance = this.deps.getInstance(req.instanceUuid);
     if (!instance) throw new BackupError(BackupErrorCode.INSTANCE_NOT_FOUND, "Instance not found");
@@ -304,8 +304,9 @@ export class BackupJobRunner {
     if (!record) throw new BackupError(BackupErrorCode.RECORD_NOT_FOUND, "Backup not found");
     this.assertLocalDirs(destinations);
     this.rememberLocalDirs(destinations);
-    const source = this.pickRestoreSource(record, destinations);
-    if (!source) throw new BackupError(BackupErrorCode.RECORD_NOT_FOUND, "No usable copy");
+    const candidates = this.restoreCandidates(record, destinations, req.source);
+    if (!candidates.length)
+      throw new BackupError(BackupErrorCode.RECORD_NOT_FOUND, "No usable copy");
     const jobId = this.newId();
     this.deps.queue.enqueue({
       backupId: jobId,
@@ -313,7 +314,7 @@ export class BackupJobRunner {
       kind: "restore",
       planId: record.planId,
       trigger: "manual",
-      run: (ctx) => this.runRestore(jobId, req.instanceUuid, record, destinations, ctx),
+      run: (ctx) => this.runRestore(jobId, req.instanceUuid, record, destinations, candidates, ctx),
       onDropped: (err) =>
         this.broadcastRestoreResult(req.instanceUuid, jobId, record.id, err, [], 0)
     });
@@ -799,23 +800,21 @@ export class BackupJobRunner {
 
   // ---------------------------------------------------------------- restore job
 
-  private pickRestoreSource(
-    record: BackupRecord,
-    destinations: PlainBackupDestination[]
-  ): { destId: string; copy: BackupCopyResult } | undefined {
-    return this.restoreCandidates(record, destinations)[0];
-  }
-
   /** Usable copies, local first. */
   private restoreCandidates(
     record: BackupRecord,
-    destinations: PlainBackupDestination[]
+    destinations: PlainBackupDestination[],
+    source?: BackupRestoreReq["source"]
   ): { destId: string; copy: BackupCopyResult }[] {
     const dirs = this.deps.store.getLocalDirs();
     const byId = new Map(destinations.map((d) => [d.id, d]));
-    const ok = Object.entries(record.copies).filter(([, c]) => c.status === "ok" && c.remoteId);
+    const ok = Object.entries(record.copies).filter(
+      ([, c]) => c.status === "ok" && c.remoteId && (!source || c.type === source)
+    );
     const usable = ok.filter(([id, c]) =>
-      c.type === "local" ? !!(dirs[id] || byId.get(id)) : byId.has(id)
+      c.type === "local"
+        ? !!(dirs[id] || byId.get(id)?.type === c.type)
+        : byId.get(id)?.type === c.type
     );
     usable.sort((a, b) => (a[1].type === "local" ? -1 : 0) - (b[1].type === "local" ? -1 : 0));
     return usable.map(([destId, copy]) => ({ destId, copy }));
@@ -838,9 +837,15 @@ export class BackupJobRunner {
       ok: !failure,
       errorCode: failure?.code,
       errorSummary: failure?.text,
-      warnings,
+      warnings: warnings.slice(0, 10).map((warning) => sanitizeBackupError(warning, secrets)),
       durationMs
     };
+    this.restoreResults.delete(instanceUuid);
+    this.restoreResults.set(instanceUuid, payload);
+    if (this.restoreResults.size > MAX_RESTORE_RESULTS) {
+      const oldest = this.restoreResults.keys().next().value;
+      if (oldest !== undefined) this.restoreResults.delete(oldest);
+    }
     this.deps.broadcast(BACKUP_RESTORE_FINISHED_EVENT, payload);
   }
 
@@ -849,6 +854,7 @@ export class BackupJobRunner {
     instanceUuid: string,
     record: BackupRecord,
     destinations: PlainBackupDestination[],
+    candidates: { destId: string; copy: BackupCopyResult }[],
     ctx: JobContext
   ): Promise<void> {
     const startedAt = this.now();
@@ -865,7 +871,6 @@ export class BackupJobRunner {
       if (!instance.isStopped()) {
         throw new BackupError(BackupErrorCode.INSTANCE_MUST_BE_STOPPED, "Instance must be stopped");
       }
-      const candidates = this.restoreCandidates(record, destinations);
       let archivePath: string | undefined;
       let lastError: unknown;
       for (const source of candidates) {
@@ -880,6 +885,7 @@ export class BackupJobRunner {
             break;
           }
           const dest = destinations.find((d) => d.id === source.destId)!;
+          ctx.setPhase("downloading");
           const driver = this.deps.driverFactory(dest);
           await fs.ensureDir(this.deps.stagingDir);
           for (let attempt = 0; ; attempt++) {
@@ -916,6 +922,7 @@ export class BackupJobRunner {
         throw lastError ?? new BackupError(BackupErrorCode.RECORD_NOT_FOUND, "No usable copy");
       }
 
+      ctx.setPhase("restoring");
       await restoreArchive({
         archivePath,
         instanceDir: instance.absoluteCwdPath(),
@@ -925,7 +932,9 @@ export class BackupJobRunner {
         signal: ctx.signal,
         statfs: this.deps.statfs,
         onProgress: (d, t) => ctx.setProgress(d, t),
-        onWarning: (w) => warnings.push(w),
+        onWarning: (warning) => {
+          if (warnings.length < 10) warnings.push(warning);
+        },
         afterExtract: this.deps.afterRestoreExtract
           ? (tops) => this.deps.afterRestoreExtract!(instanceUuid, tops)
           : undefined

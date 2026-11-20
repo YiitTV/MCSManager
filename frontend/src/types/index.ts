@@ -28,7 +28,17 @@ export enum DataPlaneMode {
   Proxy = "proxy"
 }
 
+export interface InstanceCrashSummary {
+  at: number;
+  exitCode: number | null;
+  exception?: string;
+  message?: string;
+  frames: string[];
+  plugin?: string;
+}
+
 export interface InstanceRuntimeInfo {
+  lastCrashAt?: number;
   mcPingOnline: boolean;
   currentPlayers: number;
   maxPlayers: number;

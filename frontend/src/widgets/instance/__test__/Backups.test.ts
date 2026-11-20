@@ -146,6 +146,29 @@ describe("Backups page states", () => {
     expect(wrapper.find("[data-test=cancel-btn]").exists()).toBe(true);
   });
 
+  it("shows Drive download progress and then the restore outcome", async () => {
+    const restore = { ...runningJob, kind: "restore", phase: "downloading" };
+    mocks.jobs.mockResolvedValue({ value: { running: restore, queued: [] } });
+    await mountPage();
+    expect(wrapper.find("[data-test=job-phase]").text()).toContain(
+      "TXT_CODE_backup_ui.phase_downloading"
+    );
+    const latestRestore = {
+      jobId: restore.backupId,
+      recordId: record.id,
+      ok: false,
+      errorSummary: "Archive checksum mismatch",
+      warnings: []
+    };
+    mocks.jobs.mockResolvedValue({ value: { queued: [], latestRestore } });
+    await wrapper.find("[data-test=refresh-btn]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-test=job-panel]").exists()).toBe(false);
+    expect(wrapper.find("[data-test=restore-result]").text()).toContain(
+      "Archive checksum mismatch"
+    );
+  });
+
   it("does not offer cancel to regular users", async () => {
     mocks.isAdmin.value = false;
     mocks.jobs.mockResolvedValue({ value: { running: runningJob, queued: [] } });

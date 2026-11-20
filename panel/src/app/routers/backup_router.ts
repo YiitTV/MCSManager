@@ -331,7 +331,8 @@ router.get(
     await respond(ctx, async () => {
       const { daemonId, uuid } = instanceRef(ctx.query);
       requireAssigned(ctx, daemonId, uuid);
-      return getJobs(daemonId, uuid);
+      const { latestRestore, ...jobs } = await getJobs(daemonId, uuid);
+      return isAdminCtx(ctx) && latestRestore ? { ...jobs, latestRestore } : jobs;
     });
   }
 );
@@ -350,7 +351,12 @@ router.post("/restore", permission({ level: ROLE.ADMIN }), async (ctx) => {
   await respond(ctx, async () => {
     const b = body(ctx);
     const { daemonId, uuid } = instanceRef(b);
-    const res = await restoreRecord(daemonId, uuid, String(b.recordId ?? ""));
+    if (!isValidBackupId(b.recordId)) bad("recordId");
+    if (b.source !== undefined && b.source !== "gdrive") bad("source");
+    const res =
+      b.source === "gdrive"
+        ? await restoreRecord(daemonId, uuid, b.recordId, b.source)
+        : await restoreRecord(daemonId, uuid, b.recordId);
     logInstance(ctx, "restore", daemonId, uuid, { backup_id: String(b.recordId) });
     return res;
   });

@@ -1,0 +1,9 @@
+[08:13:38 INFO]: Starting minecraft server version 1.21.4
+[08:13:39 INFO]: [LuckPerms] Loading server plugin LuckPerms v5.4.153
+[08:13:41 ERROR]: Encountered an unexpected exception
+java.lang.IllegalStateException: Storage closed
+	at me.lucko.luckperms.common.storage.Storage.getUser(Storage.java:82) ~[LuckPerms-Bukkit-5.4.153.jar:?]
+	at net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:1264) ~[paper-1.21.4.jar:1.21.4-162]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[?:?]
+[08:13:42 ERROR]: This crash report has been saved to: /data/crash-reports/crash-2026-11-20_08.13.42-server.txt
+[08:13:42 INFO]: Stopping server

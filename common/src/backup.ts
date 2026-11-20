@@ -455,6 +455,7 @@ export type BackupJobPhase =
   | "archiving"
   | "uploading"
   | "retention"
+  | "downloading"
   | "restoring";
 
 /** Kind of job occupying the single queue slot. */
@@ -717,6 +718,7 @@ export interface BackupStatusReq {
 export interface BackupStatusRes {
   running?: BackupJobStatus;
   queued: BackupJobStatus[];
+  latestRestore?: BackupRestoreFinishedPayload;
 }
 
 /** `backup/cancel` request. */
@@ -744,11 +746,24 @@ export interface BackupRestoreReq {
   instanceUuid: string;
   recordId: string;
   destinations: PlainBackupDestination[];
+  source?: "gdrive";
 }
 /** `backup/restore` response. */
 export interface BackupRestoreRes {
   /** Id of the restore job (occupies the single queue slot). */
   jobId: string;
+}
+
+/** Completion event and latest result for the instance's restore jobs. */
+export interface BackupRestoreFinishedPayload {
+  instanceUuid: string;
+  jobId: string;
+  recordId: string;
+  ok: boolean;
+  errorCode?: BackupErrorCode;
+  errorSummary?: string;
+  warnings: string[];
+  durationMs: number;
 }
 
 /** `backup/download_ticket` request. */

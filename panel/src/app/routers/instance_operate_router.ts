@@ -1,6 +1,6 @@
 import Router from "@koa/router";
 import type Koa from "koa";
-import { isEmpty, toBoolean, toNumber, toText } from "mcsmanager-common";
+import { isValidBackupId, isEmpty, toBoolean, toNumber, toText } from "mcsmanager-common";
 import { diffConfig } from "../common/config_diff";
 import { DataPlaneMode } from "../entity/setting";
 import { ROLE } from "../entity/user";
@@ -43,6 +43,21 @@ router.use(async (ctx, next) => {
   } else {
     ctx.status = 403;
     ctx.body = $t("TXT_CODE_permission.forbiddenInstance");
+  }
+});
+
+router.get("/crash_history", permission({ level: ROLE.USER }), speedLimit(3), async (ctx) => {
+  const { daemonId, uuid } = ctx.query;
+  if (!isValidBackupId(daemonId) || !isValidBackupId(uuid)) {
+    ctx.status = 400;
+    ctx.body = $t("TXT_CODE_crash.invalidInstance");
+    return;
+  }
+  try {
+    const remote = RemoteServiceSubsystem.getInstance(daemonId);
+    ctx.body = await new RemoteRequest(remote).request("crash/history", { instanceUuid: uuid });
+  } catch (err) {
+    ctx.body = err;
   }
 });
 

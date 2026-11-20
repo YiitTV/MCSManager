@@ -1,6 +1,7 @@
 import { useDefineApi } from "@/stores/useDefineApi";
 import type { RemoteMappingEntry } from "@/tools/protocol";
 import type {
+  InstanceCrashSummary,
   InstanceDetail,
   JsonData,
   NewScheduleTask,
@@ -38,6 +39,14 @@ export const getInstanceOutputLog = useDefineApi<
   string
 >({
   url: "/api/protected_instance/outputlog",
+  method: "GET"
+});
+
+export const getInstanceCrashHistory = useDefineApi<
+  { params: { uuid: string; daemonId: string } },
+  InstanceCrashSummary[]
+>({
+  url: "/api/protected_instance/crash_history",
   method: "GET"
 });
 
