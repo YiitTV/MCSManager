@@ -17,6 +17,8 @@ const percent = computed(() => {
   return Math.min(100, Math.floor((job.doneBytes / job.totalBytes) * 100));
 });
 
+const restoreQueued = computed(() => props.queued.some((job) => job.kind === "restore"));
+
 const phaseText = computed(() =>
   props.running ? t(`TXT_CODE_backup_ui.phase_${props.running.phase}`) : ""
 );
@@ -40,6 +42,8 @@ const phaseText = computed(() =>
       </div>
       <a-progress
         :percent="percent"
+        :status="running.totalBytes ? 'normal' : 'active'"
+        :show-info="!!running.totalBytes"
         size="small"
         stroke-color="var(--color-primary)"
         data-test="job-progress"
@@ -56,6 +60,7 @@ const phaseText = computed(() =>
     </div>
     <div v-if="queued.length" class="job-queued" data-test="job-queued">
       {{ t("TXT_CODE_backup_ui.queued", { count: queued.length }) }}
+      <span v-if="restoreQueued">· {{ t("TXT_CODE_backup_ui.restoreQueued") }}</span>
     </div>
   </div>
 </template>

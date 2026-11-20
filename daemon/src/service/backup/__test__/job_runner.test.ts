@@ -75,6 +75,17 @@ function dest(id: string, type: "local" | "s3" | "gdrive" = "s3"): PlainBackupDe
       config: { directory: localDir, maxTotalBytes: 1e12 }
     } as any;
   }
+  if (type === "gdrive") {
+    return {
+      id,
+      type,
+      name: id,
+      createdAt: 0,
+      updatedAt: 0,
+      secrets: { clientSecret: "client-secret", refreshToken: "refresh-token" },
+      config: { authMethod: "oauth", clientId: "client-id.apps.example" }
+    };
+  }
   return {
     id,
     type: "s3",
@@ -610,6 +621,27 @@ describe("restore job", () => {
     expect(await fs.readFile(path.join(instDir, "world/level.dat"), "utf8")).toBe("level-v1");
   });
 
+  it("explicitly restores a Drive-only record and retains the completion result", async () => {
+    const gdrive = new FakeDriver("gdrive");
+    drivers = { drive: gdrive };
+    const drive = dest("drive", "gdrive");
+    const { runner, queue, backupId } = await backup([drive]);
+    await fs.outputFile(path.join(instDir, "world/level.dat"), "changed");
+    const { jobId } = runner.enqueueRestore({
+      instanceUuid: "inst1",
+      recordId: backupId,
+      destinations: [drive],
+      source: "gdrive"
+    });
+    await queue.whenIdle();
+    expect(await fs.readFile(path.join(instDir, "world/level.dat"), "utf8")).toBe("level-v1");
+    expect(runner.status("inst1")).toMatchObject({
+      queued: [],
+      latestRestore: { jobId, recordId: backupId, ok: true }
+    });
+    expect(runner.status("inst2").latestRestore).toBeUndefined();
+  });
+
   it("refuses a running instance and unknown records", async () => {
     const { runner, backupId } = await backup([dest("local", "local")]);
     inst.stopped = false;
@@ -633,6 +665,7 @@ describe("restore job", () => {
     expect(await fs.readFile(path.join(instDir, "world/level.dat"), "utf8")).toBe("changed");
     const ev = events.find((e) => e.event === "backup/restore_finished")!;
     expect(ev.payload).toMatchObject({ ok: false, errorCode: BackupErrorCode.CHECKSUM_MISMATCH });
+    expect(runner.status("inst1").latestRestore).toEqual(ev.payload);
   });
 
   it("download resolution finds the local copy only", async () => {

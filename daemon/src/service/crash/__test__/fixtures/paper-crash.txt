@@ -1,0 +1,19 @@
+---- Minecraft Crash Report ----
+// Who set us up the TNT?
+
+Time: 2026-11-20 08:13:42
+Description: Exception ticking world
+
+net.minecraft.ReportedException: Exception ticking world
+	at net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:1718)
+	at net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:1518)
+Caused by: java.lang.IllegalStateException: Async region access on Server thread
+	at com.minefield.regions.RegionListener.onChunkLoad(RegionListener.java:72)
+	at com.minefield.regions.RegionHooks.lambda$register$1(RegionHooks.java:33)
+	at io.papermc.paper.plugin.manager.PaperEventManager.callEvent(PaperEventManager.java:54)
+	... 6 more
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.4
+	JVM Flags: 2 total; -Xms1G -Xmx3G

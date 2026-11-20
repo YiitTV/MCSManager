@@ -3749,5 +3749,17 @@
   "TXT_CODE_notification_ui.err_http_4xx": "目标拒绝了请求（HTTP 4xx），请检查 URL 和密钥。",
   "TXT_CODE_notification_ui.err_http_5xx": "目标返回服务器错误（HTTP 5xx）。",
   "TXT_CODE_notification_ui.err_network": "连接目标时发生网络错误。",
-  "TXT_CODE_notification_ui.err_unknown": "发送失败，原因未知。"
+  "TXT_CODE_notification_ui.err_unknown": "发送失败，原因未知。",
+  "TXT_CODE_crash.title": "崩溃分析",
+  "TXT_CODE_crash.badge": "异常退出",
+  "TXT_CODE_crash.empty": "暂无崩溃记录。",
+  "TXT_CODE_crash.loadFailed": "无法加载崩溃记录。",
+  "TXT_CODE_crash.exitCode": "退出代码 {code}",
+  "TXT_CODE_crash.plugin": "可能相关的插件 {plugin}",
+  "TXT_CODE_crash.invalidInstance": "实例或节点 ID 无效。",
+  "TXT_CODE_backup_ui.restoreFromDrive": "从 Google Drive 恢复",
+  "TXT_CODE_backup_ui.restoreSucceeded": "恢复成功。",
+  "TXT_CODE_backup_ui.restoreFailed": "恢复失败。",
+  "TXT_CODE_backup_ui.restoreQueued": "恢复已排队",
+  "TXT_CODE_backup_ui.phase_downloading": "正在下载备份"
 }

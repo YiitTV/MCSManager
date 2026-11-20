@@ -7,6 +7,7 @@ import { computed, onMounted, ref } from "vue";
 import { GLOBAL_INSTANCE_NAME } from "../../config/const";
 import { useLayoutCardTools } from "../../hooks/useCardTools";
 import { parseTimestamp } from "../../tools/time";
+import CrashInsights from "./CrashInsights.vue";
 import DockerInfo from "./dialogs/DockerInfo.vue";
 
 const props = defineProps<{
@@ -181,6 +182,17 @@ onMounted(async () => {
           </a-tag>
         </details>
       </a-typography-paragraph>
+      <CrashInsights
+        v-if="
+          instanceId &&
+          daemonId &&
+          instanceInfo &&
+          instanceInfo.config.nickname !== GLOBAL_INSTANCE_NAME
+        "
+        :daemon-id="daemonId"
+        :uuid="instanceId"
+        :last-crash-at="instanceInfo.info?.lastCrashAt"
+      />
     </template>
   </CardPanel>
 

@@ -22,6 +22,7 @@ import { CircularBuffer } from "../../common/string_cache";
 import StorageSubsystem from "../../common/system_storage";
 import { STEAM_CMD_PATH } from "../../const";
 import { $t } from "../../i18n";
+import { CrashHistory, CrashOutputTail } from "../../service/crash/history";
 import javaManager from "../../service/java_manager";
 import logger from "../../service/log";
 import { isDaemonShuttingDown, notifyInstanceLifecycle } from "../../service/panel_notifier";
@@ -47,6 +48,7 @@ interface IInstanceInfo {
   playersChart: { value: string }[];
   openFrpStatus: boolean;
   latency: number;
+  lastCrashAt?: number;
   cpuUsage?: number;
   memoryUsagePercent?: number;
   rxBytes?: number;
@@ -130,6 +132,8 @@ export default class Instance extends EventEmitter {
 
   private outputLoopTask?: NodeJS.Timeout;
   private outputBuffer: CircularBuffer<string>;
+  private readonly crashOutput = new CrashOutputTail();
+  public readonly crashHistory: CrashHistory;
 
   // When initializing an instance, the instance must be initialized through uuid and configuration class, otherwise the instance will be unavailable
   constructor(instanceUuid: string, config: InstanceConfig) {
@@ -140,6 +144,8 @@ export default class Instance extends EventEmitter {
     // Basic information
     this.instanceStatus = Instance.STATUS_STOP;
     this.instanceUuid = instanceUuid;
+    this.crashHistory = new CrashHistory(instanceUuid);
+    this.info.lastCrashAt = this.crashHistory.latestAt;
 
     // Action lock
     this.lock = false;
@@ -380,7 +386,9 @@ export default class Instance extends EventEmitter {
     this.config.lastDatetime = Date.now();
     const outputCode = this.config.terminalOption.pty ? "utf-8" : this.config.oe;
     process.on("data", (text: any) => {
-      this.pushOutput(iconv.decode(text, outputCode));
+      const output = iconv.decode(text, outputCode);
+      if (!this.isGlobalInstance()) this.crashOutput.append(output);
+      this.pushOutput(output);
     });
     process.on("exit", (code: number) => this.stopped(code));
     this.process = process;
@@ -412,6 +420,7 @@ export default class Instance extends EventEmitter {
     const wasRunning = this.instanceStatus != Instance.STATUS_STOP;
     this.pendingAutoRestart = null;
     if (wasRunning && !isDaemonShuttingDown()) this.notifyStopped(code, expectedStop);
+    this.crashOutput.clear();
     // Close all lifecycle tasks
     this.stopOutputLoop();
     this.println("INFO", $t("TXT_CODE_70ce6fbb"));
@@ -501,6 +510,15 @@ export default class Instance extends EventEmitter {
       const willAutoRestart = Boolean(
         ev?.autoRestart && !ev?.ignore && (max == -1 || this.autoRestartCount < max)
       );
+      if (!this.isGlobalInstance()) {
+        const directory = this.hasCwdPath() ? this.absoluteCwdPath() : undefined;
+        void this.crashHistory
+          .record(directory, this.crashOutput.take(), base.at, exitCode)
+          .then(() => {
+            this.info.lastCrashAt = this.crashHistory.latestAt;
+          })
+          .catch(() => logger.warn(`Could not record crash for instance ${this.instanceUuid}`));
+      }
       notifyInstanceLifecycle({ ...base, kind: "crashed", willAutoRestart });
     } catch (err: any) {
       logger.debug(`notifyStopped failed: ${err?.message ?? err}`);
@@ -544,12 +562,14 @@ export default class Instance extends EventEmitter {
       playersChart: [],
       openFrpStatus: false,
       latency: 0,
+      lastCrashAt: this.info.lastCrashAt,
       allocatedPorts: this.info.allocatedPorts ?? []
     };
   }
 
   // destroy this instance
   destroy() {
+    this.crashHistory.remove();
     if (this.process && this.process.pid) {
       this.process.kill("SIGKILL");
     }

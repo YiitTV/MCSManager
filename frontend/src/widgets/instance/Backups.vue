@@ -46,6 +46,8 @@ const {
   queued,
   loading,
   jobActive,
+  restoreActive,
+  latestRestore,
   cooldownSeconds,
   refreshAll,
   runNow,
@@ -114,15 +116,16 @@ const download = async (record: BackupRecord) => {
   });
 };
 
-const confirmRestore = (record: BackupRecord) => {
+const confirmRestore = (record: BackupRecord, source?: "gdrive") => {
+  const action = source ? "restoreFromDrive" : "restore";
   Modal.confirm({
-    title: t("TXT_CODE_backup_ui.restoreTitle"),
+    title: t(source ? "TXT_CODE_backup_ui.restoreFromDrive" : "TXT_CODE_backup_ui.restoreTitle"),
     content: t("TXT_CODE_backup_ui.restoreWarning"),
-    okText: t("TXT_CODE_backup_ui.restore"),
+    okText: t(`TXT_CODE_backup_ui.${action}`),
     okType: "danger",
     cancelText: t("TXT_CODE_backup_ui.cancel"),
     onOk: async () => {
-      const ok = await safely(() => restore(record.id));
+      const ok = await safely(() => (source ? restore(record.id, source) : restore(record.id)));
       if (ok) message.success(t("TXT_CODE_backup_ui.restoreStarted"));
     }
   });
@@ -209,6 +212,30 @@ onMounted(refresh);
               :is-admin="isAdmin"
               @cancel="(id: string) => safely(() => cancel(id))"
             />
+            <a-alert
+              v-if="isAdmin && latestRestore && !restoreActive"
+              class="mb-12"
+              data-test="restore-result"
+              :type="latestRestore.ok ? 'success' : 'error'"
+              :message="
+                t(
+                  latestRestore.ok
+                    ? 'TXT_CODE_backup_ui.restoreSucceeded'
+                    : 'TXT_CODE_backup_ui.restoreFailed'
+                )
+              "
+              show-icon
+            >
+              <template
+                v-if="latestRestore.errorSummary || latestRestore.warnings.length"
+                #description
+              >
+                <div v-if="latestRestore.errorSummary">{{ latestRestore.errorSummary }}</div>
+                <div v-for="(warning, index) in latestRestore.warnings" :key="index">
+                  {{ warning }}
+                </div>
+              </template>
+            </a-alert>
             <a-table
               :data-source="plans"
               :pagination="false"

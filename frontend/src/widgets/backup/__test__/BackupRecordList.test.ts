@@ -83,6 +83,18 @@ describe("BackupRecordList", () => {
     expect(w.emitted("restore")?.[0][0]).toMatchObject({ id: "r1" });
   });
 
+  it("labels Drive-only copies and offers explicit Drive restore to admins", async () => {
+    const records = [record({ copies: { gd: { status: "ok", type: "gdrive", name: "Offsite" } } })];
+    const admin = mountList({ records });
+    expect(admin.text()).toContain("TXT_CODE_backup_ui.type_gdrive");
+    expect(admin.find("[data-test=download-btn]").exists()).toBe(false);
+    await admin.find("[data-test=restore-drive-btn]").trigger("click");
+    expect(admin.emitted("restore")).toEqual([[records[0], "gdrive"]]);
+    expect(
+      mountList({ records, isAdmin: false }).find("[data-test=restore-drive-btn]").exists()
+    ).toBe(false);
+  });
+
   it("shows the empty state", () => {
     expect(mountList({ records: [] }).find("[data-test=records-empty]").exists()).toBe(true);
   });

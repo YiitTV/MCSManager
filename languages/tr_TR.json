@@ -3749,5 +3749,17 @@
   "TXT_CODE_notification_ui.err_unknown": "Gönderim bilinmeyen bir nedenle başarısız oldu.",
   "TXT_CODE_instance_group_ui.viewNormal": "Normal",
   "TXT_CODE_instance_group_ui.viewGrouped": "Gruplu",
-  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış"
+  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış",
+  "TXT_CODE_crash.title": "Çökme analizi",
+  "TXT_CODE_crash.badge": "Çöktü",
+  "TXT_CODE_crash.empty": "Kayıtlı sunucu çökmesi yok.",
+  "TXT_CODE_crash.loadFailed": "Sunucu çökme geçmişi yüklenemedi.",
+  "TXT_CODE_crash.exitCode": "Çıkış kodu {code}",
+  "TXT_CODE_crash.plugin": "Olası eklenti {plugin}",
+  "TXT_CODE_crash.invalidInstance": "Sunucu veya düğüm kimliği geçersiz.",
+  "TXT_CODE_backup_ui.restoreFromDrive": "Google Drive’dan geri yükle",
+  "TXT_CODE_backup_ui.restoreSucceeded": "Geri yükleme tamamlandı.",
+  "TXT_CODE_backup_ui.restoreFailed": "Geri yükleme başarısız.",
+  "TXT_CODE_backup_ui.restoreQueued": "Geri yükleme sırada",
+  "TXT_CODE_backup_ui.phase_downloading": "Yedek indiriliyor"
 }

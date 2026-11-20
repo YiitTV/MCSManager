@@ -13,7 +13,8 @@ import {
   type BackupDownloadTicket,
   type BackupJobStatus,
   type BackupPlan,
-  type BackupRecord
+  type BackupRecord,
+  type BackupRestoreResult
 } from "@/types/backup";
 import { computed, onBeforeUnmount, ref } from "vue";
 
@@ -37,6 +38,8 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
   const running = ref<BackupJobStatus>();
   const queued = ref<BackupJobStatus[]>([]);
   const loading = ref(false);
+  const latestRestore = ref<BackupRestoreResult>();
+  const restoreSubmitting = ref(false);
   /** Per plan id: epoch ms until which "Backup now" is rate limited. */
   const cooldownUntil = ref<Record<string, number>>({});
   const nowTick = ref(now());
@@ -44,8 +47,18 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let tickTimer: ReturnType<typeof setInterval> | undefined;
   let disposed = false;
+  const jobsController = new AbortController();
+  let jobsRequest: Promise<void> | undefined;
 
-  const jobActive = computed(() => !!running.value || queued.value.length > 0);
+  const jobActive = computed(
+    () => restoreSubmitting.value || !!running.value || queued.value.length > 0
+  );
+  const restoreActive = computed(
+    () =>
+      restoreSubmitting.value ||
+      running.value?.kind === "restore" ||
+      queued.value.some((job) => job.kind === "restore")
+  );
   const params = { daemonId, uuid };
 
   const loadRecords = async () => {
@@ -67,11 +80,17 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
     pollTimer = undefined;
   };
 
-  const refreshJobs = async () => {
+  const loadJobs = async () => {
     const { execute } = getBackupJobs();
-    const res = await execute({ params });
+    const res = await execute({
+      params,
+      forceRequest: true,
+      signal: jobsController.signal,
+      timeout: 30_000
+    });
     if (disposed) return;
     const wasActive = jobActive.value;
+    latestRestore.value = res.value?.latestRestore;
     running.value = res.value?.running;
     queued.value = res.value?.queued ?? [];
     if (jobActive.value) {
@@ -83,10 +102,19 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
     }
   };
 
+  function refreshJobs() {
+    jobsRequest ??= loadJobs().finally(() => {
+      jobsRequest = undefined;
+    });
+    return jobsRequest;
+  }
+
   function startPolling() {
     if (pollTimer || disposed) return;
     pollTimer = setInterval(() => {
-      refreshJobs().catch((e) => console.error("backup jobs poll failed:", e));
+      refreshJobs().catch((e) => {
+        if (!disposed) console.error("backup jobs poll failed:", e);
+      });
     }, BACKUP_POLL_INTERVAL_MS);
   }
 
@@ -136,10 +164,18 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
     await refreshJobs();
   };
 
-  const restore = async (recordId: string) => {
+  const restore = async (recordId: string, source?: "gdrive") => {
     const { execute } = restoreBackup();
-    await execute({ data: { ...params, recordId } });
-    await refreshJobs();
+    restoreSubmitting.value = true;
+    try {
+      await execute({ data: { ...params, recordId, ...(source ? { source } : {}) } });
+    } finally {
+      restoreSubmitting.value = false;
+    }
+    // A status request already in flight may have seen the queue before submission.
+    await jobsRequest?.catch(() => undefined);
+    startPolling();
+    await refreshJobs().catch((e) => console.error("restore status request failed:", e));
   };
 
   /** Returns the single-use download URL of the local copy. */
@@ -152,6 +188,7 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
 
   const dispose = () => {
     disposed = true;
+    jobsController.abort();
     stopPolling();
     if (tickTimer) clearInterval(tickTimer);
     tickTimer = undefined;
@@ -165,6 +202,8 @@ export function useBackups(daemonId: string, uuid: string, now: () => number = D
     queued,
     loading,
     jobActive,
+    restoreActive,
+    latestRestore,
     cooldownSeconds,
     loadRecords,
     loadPlans,

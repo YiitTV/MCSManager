@@ -3749,5 +3749,17 @@
   "TXT_CODE_notification_ui.err_http_4xx": "The target rejected the request (HTTP 4xx). Check the URL and secret.",
   "TXT_CODE_notification_ui.err_http_5xx": "The target reported a server error (HTTP 5xx).",
   "TXT_CODE_notification_ui.err_network": "A network error occurred while contacting the target.",
-  "TXT_CODE_notification_ui.err_unknown": "Delivery failed for an unknown reason."
+  "TXT_CODE_notification_ui.err_unknown": "Delivery failed for an unknown reason.",
+  "TXT_CODE_crash.title": "Crash insights",
+  "TXT_CODE_crash.badge": "Crashed",
+  "TXT_CODE_crash.empty": "No crashes recorded.",
+  "TXT_CODE_crash.loadFailed": "Could not load crash history.",
+  "TXT_CODE_crash.exitCode": "Exit code {code}",
+  "TXT_CODE_crash.plugin": "Likely plugin {plugin}",
+  "TXT_CODE_crash.invalidInstance": "Invalid instance or node ID.",
+  "TXT_CODE_backup_ui.restoreFromDrive": "Restore from Google Drive",
+  "TXT_CODE_backup_ui.restoreSucceeded": "Restore completed.",
+  "TXT_CODE_backup_ui.restoreFailed": "Restore failed.",
+  "TXT_CODE_backup_ui.restoreQueued": "Restore queued",
+  "TXT_CODE_backup_ui.phase_downloading": "Downloading backup"
 }

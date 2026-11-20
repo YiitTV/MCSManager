@@ -316,6 +316,13 @@ const instanceOperations = computed(() =>
               </span>
             </a-tag>
 
+            <a-tooltip
+              v-if="instanceInfo?.info?.lastCrashAt"
+              :title="parseTimestamp(instanceInfo.info.lastCrashAt)"
+            >
+              <a-tag color="error" class="m-0">{{ t("TXT_CODE_crash.badge") }}</a-tag>
+            </a-tooltip>
+
             <div v-if="instanceInfo?.config.tag && instanceInfo?.config.tag.length > 0">|</div>
             <a-tag v-for="item in instanceInfo?.config.tag" :key="item" class="m-0">
               {{ item }}

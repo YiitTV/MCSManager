@@ -79,8 +79,8 @@ export const cancelBackupJob = useDefineApi<
 >({ url: "/api/backup/cancel", method: "POST" });
 
 export const restoreBackup = useDefineApi<
-  { data: { daemonId: string; uuid: string; recordId: string } },
-  { jobId?: string } | boolean
+  { data: { daemonId: string; uuid: string; recordId: string; source?: "gdrive" } },
+  { jobId: string }
 >({ url: "/api/backup/restore", method: "POST" });
 
 export const requestBackupDownload = useDefineApi<

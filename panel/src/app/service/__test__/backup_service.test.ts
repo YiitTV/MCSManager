@@ -23,7 +23,9 @@ import {
   deletePlansForInstances,
   listPlansForInstance,
   listPublicDestinations,
+  getJobs,
   getStoredDestination,
+  restoreRecord,
   updateDestination,
   updatePlan,
   toPlainDestination
@@ -336,5 +338,50 @@ describe("plans", () => {
     expect((await code(updatePlan({ id: plan.id, uuid: "other" })))[0]).toBe(
       "PLAN_INSTANCE_IMMUTABLE"
     );
+  });
+});
+
+describe("Drive restore", () => {
+  it("sends the selected Drive destination and returns the daemon job id", async () => {
+    const drive = await createDestination({
+      type: "gdrive",
+      name: "Drive",
+      config: { authMethod: "oauth", clientId: "client-id.apps.example" },
+      secrets: { clientSecret: "client-secret" }
+    });
+    fakeDaemon.on("backup/records", () => ({
+      records: [
+        {
+          id: "bk1",
+          copies: {
+            local: { type: "local", status: "ok", remoteId: "bk1.zip" },
+            [drive.id]: { type: "gdrive", status: "ok", remoteId: "file-id" }
+          }
+        }
+      ]
+    }));
+    fakeDaemon.on("backup/restore", () => ({ jobId: "job1" }));
+
+    expect(await restoreRecord("d1", "inst1", "bk1", "gdrive")).toEqual({ jobId: "job1" });
+    expect(fakeDaemon.callsOf("backup/restore")[0].data).toMatchObject({
+      instanceUuid: "inst1",
+      recordId: "bk1",
+      source: "gdrive",
+      destinations: [{ id: drive.id, type: "gdrive" }]
+    });
+  });
+
+  it("passes through only the requested instance's latest restore result", async () => {
+    const result = {
+      instanceUuid: "inst1",
+      jobId: "job1",
+      recordId: "bk1",
+      ok: true,
+      warnings: [],
+      durationMs: 50
+    };
+    fakeDaemon.on("backup/status", () => ({ queued: [], latestRestore: result }));
+    expect((await getJobs("d1", "inst1")).latestRestore).toEqual(result);
+    expect((await getJobs("d1", "inst2")).latestRestore).toBeUndefined();
   });
 });

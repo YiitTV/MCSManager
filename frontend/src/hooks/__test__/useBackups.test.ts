@@ -94,6 +94,20 @@ describe("useBackups polling", () => {
     expect(mocks.jobs).not.toHaveBeenCalled();
   });
 
+  it("shows a Drive restore result even when the job finishes before the first status request", async () => {
+    const { api } = mountHook();
+    const latestRestore = { jobId: "restore1", recordId: "bk1", ok: false, warnings: [] };
+    mocks.jobs.mockResolvedValue({ value: { queued: [], latestRestore } });
+    await api.restore("bk1", "gdrive");
+    expect(mocks.restore).toHaveBeenCalledWith({
+      data: { daemonId: "d1", uuid: "u1", recordId: "bk1", source: "gdrive" }
+    });
+    expect(api.latestRestore.value).toEqual(latestRestore);
+    expect(api.restoreActive.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(BACKUP_POLL_INTERVAL_MS * 2);
+    expect(mocks.jobs).toHaveBeenCalledTimes(1);
+  });
+
   it("clears the poll timer on unmount", async () => {
     mocks.jobs.mockResolvedValue({ value: { running: runningJob, queued: [] } });
     const { api, wrapper } = mountHook();

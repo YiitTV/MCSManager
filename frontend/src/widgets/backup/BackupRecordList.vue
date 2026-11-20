@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "download", record: BackupRecord): void;
-  (e: "restore", record: BackupRecord): void;
+  (e: "restore", record: BackupRecord, source?: "gdrive"): void;
 }>();
 
 const formatSize = (bytes: number) => prettyBytes(bytes ?? 0, { binary: true });
@@ -29,7 +29,10 @@ const statusText = (status: string) => t(`TXT_CODE_backup_ui.status_${status}`);
 
 const hasLocalCopy = (r: BackupRecord) =>
   Object.values(r.copies).some((c) => c.type === "local" && c.status === "ok");
-const hasAnyCopy = (r: BackupRecord) => Object.values(r.copies).some((c) => c.status === "ok");
+const hasDriveCopy = (r: BackupRecord) =>
+  Object.values(r.copies).some((c) => c.type === "gdrive" && c.status === "ok");
+const hasOtherCopy = (r: BackupRecord) =>
+  Object.values(r.copies).some((c) => c.type !== "gdrive" && c.status === "ok");
 
 const restoreDisabledReason = computed(() => {
   if (props.instanceRunning) return t("TXT_CODE_backup_ui.restoreNeedsStopped");
@@ -77,7 +80,13 @@ const restoreDisabledReason = computed(() => {
           :title="copy.error"
         >
           <a-tag :color="statusColor(copy.status)" class="status-chip" :data-status="copy.status">
-            {{ copy.name }}: {{ statusText(copy.status) }}
+            {{ copy.name
+            }}<template
+              v-if="copy.type === 'gdrive' && copy.name !== t('TXT_CODE_backup_ui.type_gdrive')"
+            >
+              ({{ t("TXT_CODE_backup_ui.type_gdrive") }})
+            </template>
+            · {{ statusText(copy.status) }}
           </a-tag>
         </a-tooltip>
       </template>
@@ -94,16 +103,31 @@ const restoreDisabledReason = computed(() => {
             <DownloadOutlined />
             {{ t("TXT_CODE_backup_ui.download") }}
           </a-button>
-          <a-tooltip v-if="isAdmin" :title="restoreDisabledReason">
+          <a-tooltip
+            v-if="isAdmin && (hasOtherCopy(record) || !hasDriveCopy(record))"
+            :title="restoreDisabledReason"
+          >
             <a-button
               size="small"
               danger
               data-test="restore-btn"
-              :disabled="!hasAnyCopy(record) || instanceRunning || jobActive"
+              :disabled="!hasOtherCopy(record) || instanceRunning || jobActive"
               @click="emit('restore', record)"
             >
               <RollbackOutlined />
               {{ t("TXT_CODE_backup_ui.restore") }}
+            </a-button>
+          </a-tooltip>
+          <a-tooltip v-if="isAdmin && hasDriveCopy(record)" :title="restoreDisabledReason">
+            <a-button
+              size="small"
+              danger
+              data-test="restore-drive-btn"
+              :disabled="instanceRunning || jobActive"
+              @click="emit('restore', record, 'gdrive')"
+            >
+              <RollbackOutlined />
+              {{ t("TXT_CODE_backup_ui.restoreFromDrive") }}
             </a-button>
           </a-tooltip>
         </a-space>

@@ -84,6 +84,7 @@ handle(BACKUP_PROTOCOL.RESTORE, (data) => {
   return getBackupRunner().enqueueRestore({
     instanceUuid,
     recordId: req.recordId,
+    source: req.source,
     destinations: req.destinations ?? []
   });
 });

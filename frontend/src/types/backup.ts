@@ -163,6 +163,7 @@ export type BackupJobPhase =
   | "archiving"
   | "uploading"
   | "retention"
+  | "downloading"
   | "restoring";
 
 export interface BackupJobStatus {
@@ -179,7 +180,17 @@ export interface BackupJobStatus {
   startedAt?: number;
 }
 
+export interface BackupRestoreResult {
+  jobId: string;
+  recordId: string;
+  ok: boolean;
+  errorCode?: string;
+  errorSummary?: string;
+  warnings: string[];
+}
+
 export interface BackupJobsResult {
+  latestRestore?: BackupRestoreResult;
   running?: BackupJobStatus;
   queued: BackupJobStatus[];
 }
