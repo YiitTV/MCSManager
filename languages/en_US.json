@@ -3749,5 +3749,15 @@
   "TXT_CODE_notification_ui.err_http_4xx": "The target rejected the request (HTTP 4xx). Check the URL and secret.",
   "TXT_CODE_notification_ui.err_http_5xx": "The target reported a server error (HTTP 5xx).",
   "TXT_CODE_notification_ui.err_network": "A network error occurred while contacting the target.",
-  "TXT_CODE_notification_ui.err_unknown": "Delivery failed for an unknown reason."
+  "TXT_CODE_notification_ui.err_unknown": "Delivery failed for an unknown reason.",
+  "TXT_CODE_instance_monitoring.invalidRequest": "Invalid instance monitoring request.",
+  "TXT_CODE_instance_monitoring.menu": "Resource Monitoring",
+  "TXT_CODE_instance_monitoring.title": "Resource Monitoring · Last 24 Hours",
+  "TXT_CODE_instance_monitoring.memoryWarning": "High RAM usage",
+  "TXT_CODE_instance_monitoring.tpsWarning": "Low TPS",
+  "TXT_CODE_instance_monitoring.sparkline": "RAM trend over the last hour",
+  "TXT_CODE_instance_monitoring.ramMib": "RAM (MiB)",
+  "TXT_CODE_instance_monitoring.cpuPercent": "CPU (%)",
+  "TXT_CODE_instance_monitoring.unavailable": "Monitoring data is unavailable.",
+  "TXT_CODE_instance_monitoring.noSamples": "No monitoring samples yet."
 }

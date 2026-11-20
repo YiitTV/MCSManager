@@ -73,3 +73,5 @@ export * from "./backup";
 export * from "./backup_validation";
 
 export { GlobalVariable, InstanceStreamListener, MCServerStatus, StorageSubsystem };
+
+export * from "./instance_monitoring";

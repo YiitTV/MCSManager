@@ -3749,5 +3749,15 @@
   "TXT_CODE_notification_ui.err_http_4xx": "目标拒绝了请求（HTTP 4xx），请检查 URL 和密钥。",
   "TXT_CODE_notification_ui.err_http_5xx": "目标返回服务器错误（HTTP 5xx）。",
   "TXT_CODE_notification_ui.err_network": "连接目标时发生网络错误。",
-  "TXT_CODE_notification_ui.err_unknown": "发送失败，原因未知。"
+  "TXT_CODE_notification_ui.err_unknown": "发送失败，原因未知。",
+  "TXT_CODE_instance_monitoring.invalidRequest": "无效的实例监控请求。",
+  "TXT_CODE_instance_monitoring.menu": "资源监控",
+  "TXT_CODE_instance_monitoring.title": "资源监控 · 最近 24 小时",
+  "TXT_CODE_instance_monitoring.memoryWarning": "内存占用过高",
+  "TXT_CODE_instance_monitoring.tpsWarning": "TPS 过低",
+  "TXT_CODE_instance_monitoring.sparkline": "最近一小时的内存使用趋势",
+  "TXT_CODE_instance_monitoring.ramMib": "内存 (MiB)",
+  "TXT_CODE_instance_monitoring.cpuPercent": "CPU (%)",
+  "TXT_CODE_instance_monitoring.unavailable": "监控数据暂不可用。",
+  "TXT_CODE_instance_monitoring.noSamples": "暂无监控采样数据。"
 }

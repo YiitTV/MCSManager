@@ -1,10 +1,21 @@
 import Dockerode from "dockerode";
 import { DefaultDocker } from "../../../service/docker_service";
+import type { IInstanceProcess } from "../../instance/interface";
 import Instance from "../../instance/instance";
 import { ILifeCycleTask } from "../../instance/life_cycle";
 
 export default class DockerStatsTask implements ILifeCycleTask {
   private static defaultDocker = new DefaultDocker();
+
+  private static readonly monitoring = new WeakMap<
+    Instance,
+    { process: IInstanceProcess; timestamp: number; ramBytes?: number; cpuPercent?: number }
+  >();
+
+  static getMonitoringStats(instance: Instance, process: IInstanceProcess) {
+    const cached = this.monitoring.get(instance);
+    if (cached?.process === process && Date.now() - cached.timestamp < 15_000) return cached;
+  }
 
   public status: number = 0;
   public name: string = "DockerStats";
@@ -117,8 +128,22 @@ export default class DockerStatsTask implements ILifeCycleTask {
     this.isUpdating = true;
 
     try {
+      const process = instance.process;
       const container = DockerStatsTask.defaultDocker.getContainer(containerId);
       const stats = await container.stats({ stream: false });
+      if (!process || instance.process !== process) return;
+
+      const memory = stats.memory_stats?.stats as
+        | (Dockerode.MemoryStats["stats"] & { anon?: number })
+        | undefined;
+      const cpuPercent = this.getCpuUsage(stats);
+      DockerStatsTask.monitoring.set(instance, {
+        process,
+        timestamp: Date.now(),
+        ramBytes:
+          memory?.total_rss ?? memory?.rss ?? memory?.anon ?? stats.memory_stats?.privateworkingset,
+        cpuPercent
+      });
 
       let rxBytes: number | undefined = undefined;
       let txBytes: number | undefined = undefined;
@@ -141,7 +166,7 @@ export default class DockerStatsTask implements ILifeCycleTask {
       const memoryUsagePercent = Math.ceil((memoryUsage / stats.memory_stats.limit) * 100);
 
       const result = {
-        cpuUsage: this.getCpuUsage(stats),
+        cpuUsage: cpuPercent,
         rxBytes,
         txBytes,
         rxRate,
@@ -171,6 +196,7 @@ export default class DockerStatsTask implements ILifeCycleTask {
   }
 
   async stop(instance: Instance) {
+    DockerStatsTask.monitoring.delete(instance);
     if (this.task) {
       clearInterval(this.task);
       this.task = null;

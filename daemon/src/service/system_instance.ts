@@ -16,6 +16,7 @@ import InstanceConfig from "../entity/instance/Instance_config";
 import { $t } from "../i18n";
 import { sleep } from "../utils/sleep";
 import { getBackupRunner } from "./backup/service";
+import { instanceMonitoring } from "./instance_monitoring";
 import logger from "./log";
 import { setDaemonShuttingDown } from "./panel_notifier";
 import InstanceControl from "./system_instance_control";
@@ -184,6 +185,7 @@ class InstanceSubsystem extends EventEmitter {
       this.emit("data", instance.instanceUuid, ...arr);
     });
     instance.on("exit", (...arr) => {
+      instanceMonitoring.clearCurrent(instance);
       this.emit(
         "exit",
         {
@@ -240,6 +242,7 @@ class InstanceSubsystem extends EventEmitter {
       return targets.map(({ instance, instanceUuid, directory }) => {
         instance.destroy();
         this.instances.delete(instanceUuid);
+        instanceMonitoring.remove(instance);
         StorageSubsystem.delete("InstanceConfig", instanceUuid);
         InstanceControl.deleteInstanceAllTask(instanceUuid);
         if (directory) {

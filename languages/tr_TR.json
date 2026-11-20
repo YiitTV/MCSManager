@@ -3749,5 +3749,15 @@
   "TXT_CODE_notification_ui.err_unknown": "Gönderim bilinmeyen bir nedenle başarısız oldu.",
   "TXT_CODE_instance_group_ui.viewNormal": "Normal",
   "TXT_CODE_instance_group_ui.viewGrouped": "Gruplu",
-  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış"
+  "TXT_CODE_instance_group_ui.ungrouped": "Gruplanmamış",
+  "TXT_CODE_instance_monitoring.invalidRequest": "Geçersiz sunucu izleme isteği.",
+  "TXT_CODE_instance_monitoring.menu": "Kaynak İzleme",
+  "TXT_CODE_instance_monitoring.title": "Kaynak İzleme · Son 24 Saat",
+  "TXT_CODE_instance_monitoring.memoryWarning": "Yüksek RAM kullanımı",
+  "TXT_CODE_instance_monitoring.tpsWarning": "Düşük TPS",
+  "TXT_CODE_instance_monitoring.sparkline": "Son bir saatteki RAM kullanım eğilimi",
+  "TXT_CODE_instance_monitoring.ramMib": "RAM (MiB)",
+  "TXT_CODE_instance_monitoring.cpuPercent": "CPU (%)",
+  "TXT_CODE_instance_monitoring.unavailable": "İzleme verileri kullanılamıyor.",
+  "TXT_CODE_instance_monitoring.noSamples": "Henüz izleme verisi yok."
 }
