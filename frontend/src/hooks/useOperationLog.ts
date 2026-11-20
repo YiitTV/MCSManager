@@ -89,6 +89,19 @@ export const useOperationLog = () => {
         }
       })
     },
+    instance_minecraft_action: {
+      title: t("TXT_CODE_minecraft_ops.auditTitle"),
+      render: (item) => ({
+        text: t("TXT_CODE_minecraft_ops.auditEntry"),
+        managementText: [t(`TXT_CODE_minecraft_ops.${item.action}`), item.player]
+          .filter(Boolean)
+          .join(" "),
+        data: {
+          operator_name: getOperatorLabel(item),
+          instance_name: item.instance_name || item.instance_id
+        }
+      })
+    },
     instance_config_change: {
       title: t("TXT_CODE_e0398e0a"),
       render: (item) => ({
@@ -183,9 +196,7 @@ export const useOperationLog = () => {
     instance_file_rename: {
       title: t("TXT_CODE_ccaabd02"),
       render: (item) => ({
-        text: t(
-          "TXT_CODE_5487e155"
-        ),
+        text: t("TXT_CODE_5487e155"),
         managementText: "<<file_before>> → <<file_after>>",
         data: {
           operator_name: getOperatorLabel(item),
@@ -198,9 +209,7 @@ export const useOperationLog = () => {
     instance_file_move: {
       title: t("TXT_CODE_4a9b8ea9"),
       render: (item) => ({
-        text: t(
-          "TXT_CODE_76773e23"
-        ),
+        text: t("TXT_CODE_76773e23"),
         managementText: "<<file_before>> → <<file_after>>",
         data: {
           operator_name: getOperatorLabel(item),
@@ -322,9 +331,7 @@ export const useOperationLog = () => {
         const changed = getChangedKeys(item);
         if (changed) managementText.push(changed);
         return {
-          text: item.target_user_name
-            ? t("TXT_CODE_3268ae52")
-            : t("TXT_CODE_5564bc4c"),
+          text: item.target_user_name ? t("TXT_CODE_3268ae52") : t("TXT_CODE_5564bc4c"),
           managementText: managementText.join("  "),
           data: {
             operator_name: getOperatorLabel(item),
@@ -336,9 +343,7 @@ export const useOperationLog = () => {
     user_apikey_change: {
       title: t("TXT_CODE_c6bd6421"),
       render: (item) => ({
-        text: item.enabled
-          ? t("TXT_CODE_d0ea7f96")
-          : t("TXT_CODE_1e9cadb1"),
+        text: item.enabled ? t("TXT_CODE_d0ea7f96") : t("TXT_CODE_1e9cadb1"),
         managementText: item.enabled ? t("TXT_CODE_71c45450") : t("TXT_CODE_52806070"),
         data: {
           operator_name: getOperatorLabel(item),

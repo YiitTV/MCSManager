@@ -184,12 +184,19 @@ export type UserApiKeyChangeOptions = {
   enabled: boolean;
 } & GlobalGeneralOptions;
 
+export type InstanceMinecraftActionOptions = {
+  type: "instance_minecraft_action";
+  action: string;
+  player?: string;
+} & InstanceGeneralOptions;
+
 export type OperationLoggerItem =
   | InstanceStartOptions
   | InstanceStopOptions
   | InstanceRestartOptions
   | InstanceUpdateOptions
   | InstanceKillOptions
+  | InstanceMinecraftActionOptions
   | InstanceConfigChangeOptions
   | InstanceCreateOptions
   | InstanceDeleteOptions

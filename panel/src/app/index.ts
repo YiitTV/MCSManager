@@ -15,6 +15,7 @@ import lowUserRouter from "./routers/general_user_router";
 import instanceRouter from "./routers/instance_admin_router";
 import exchangeRouter from "./routers/instance_exchange_router";
 import instanceGroupRouter from "./routers/instance_group_router";
+import minecraftOperationsRouter from "./routers/minecraft_operations_router";
 import userInstanceRouter from "./routers/instance_operate_router";
 import javaManagerRouter from "./routers/java_manager_router";
 import loginRouter from "./routers/login_router";
@@ -48,6 +49,7 @@ export function mountRouters(app: Koa<Koa.DefaultState, Koa.DefaultContext>) {
   apiRouter.use(modManagerRouter.routes()).use(modManagerRouter.allowedMethods());
   apiRouter.use(upgradeRouter.routes()).use(upgradeRouter.allowedMethods());
   apiRouter.use(instanceGroupRouter.routes()).use(instanceGroupRouter.allowedMethods());
+  apiRouter.use(minecraftOperationsRouter.routes()).use(minecraftOperationsRouter.allowedMethods());
 
   apiRouter.use(notificationRouter.routes()).use(notificationRouter.allowedMethods());
 
