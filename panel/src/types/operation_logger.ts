@@ -4,6 +4,7 @@ export enum OperationLoggerAction {
   InstanceRestart = "instance_restart",
   InstanceUpdate = "instance_update",
   InstanceKill = "instance_kill",
+  InstanceMinecraftAction = "instance_minecraft_action",
   InstanceConfigChange = "instance_config_change",
   InstanceCreate = "instance_create",
   InstanceDelete = "instance_delete",
@@ -220,12 +221,19 @@ export type UserApiKeyChangeOptions = {
   enabled: boolean;
 } & GlobalGeneralOptions;
 
+export type InstanceMinecraftActionOptions = {
+  type: "instance_minecraft_action";
+  action: string;
+  player?: string;
+} & InstanceGeneralOptions;
+
 export type OperationLoggerItem =
   | InstanceStartOptions
   | InstanceStopOptions
   | InstanceRestartOptions
   | InstanceUpdateOptions
   | InstanceKillOptions
+  | InstanceMinecraftActionOptions
   | InstanceConfigChangeOptions
   | InstanceCreateOptions
   | InstanceDeleteOptions
